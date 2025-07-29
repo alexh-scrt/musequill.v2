@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Musequill Wizard - Component Tests</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <!-- Local Components -->
+    <script src="./js/stores/wizard-store.js"></script>
+    <script src="./js/utils/api-client.js"></script>
+    <script src="./js/steps/step-1-concept.js"></script>
+    <script src="./js/steps/step-2-genre.js"></script>
+    <script src="./js/steps/step-3-audience.js"></script>
+    <script src="./js/components/navigation.js"></script>
+
+    <style>
+        .test-section {
+            border: 2px solid #e5e7eb;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+            padding: 1rem;
+        }
+
+        .test-pass {
+            border-color: #10b981;
+            background-color: #f0fdf4;
+        }
+
+        .test-fail {
+            border-color: #ef4444;
+            background-color: #fef2f2;
+        }
+
+        .test-warning {
+            border-color: #f59e0b;
+            background-color: #fffbeb;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-800 mb-8">Musequill Wizard - Component Tests</h1>
+
+        <!-- Test Runner -->
+        <div x-data="testRunner()" x-init="runAllTests()">
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-xl font-semibold mb-4">Test Results</h2>
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 bg-green-500 rounded-full"></span>
+                        <span x-text="`Passed: ${testResults.passed}`"></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 bg-red-500 rounded-full"></span>
+                        <span x-text="`Failed: ${testResults.failed}`"></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 bg-yellow-500 rounded-full"></span>
+                        <span x-text="`Warnings: ${testResults.warnings}`"></span>
+                    </div>
+                </div>
+                <button @click="runAllTests()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    Run Tests Again
+                </button>
+            </div>
+
+            <!-- Individual Test Results -->
+            <template x-for="test in tests" :key="test.name">
+                <div class="test-section" :class="{
+                         'test-pass': test.status === 'pass',
+                         'test-fail': test.status === 'fail',
+                         'test-warning': test.status === 'warning'
+                     }">
+                    <h3 class="font-semibold text-lg mb-2" x-text="test.name"></h3>
+                    <p class="text-gray-600 mb-2" x-text="test.description"></p>
+                    <div class="flex items-center gap-2">
+                        <span class="font-medium" :class="{
+                                  'text-green-600': test.status === 'pass',
+                                  'text-red-600': test.status === 'fail',
+                                  'text-yellow-600': test.status === 'warning'
+                              }" x-text="test.status.toUpperCase()">
+                        </span>
+                        <span x-text="test.message"></span>
+                    </div>
+                    <div x-show="test.details" class="mt-2 text-sm text-gray-500">
+                        <pre x-text="test.details"></pre>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- API Connection Test -->
+        <div x-data="apiConnectionTest()" class="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">API Connection Test</h2>
+            <div class="flex items-center gap-4 mb-4">
+                <button @click="testConnection()" :disabled="isChecking"
+                    class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 disabled:opacity-50">
+                    <span x-show="!isChecking">Test API Connection</span>
+                    <span x-show="isChecking">Testing...</span>
+                </button>
+                <div x-show="lastResult" class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full" :class="{
+                              'bg-green-500': lastResult?.connected,
+                              'bg-red-500': lastResult && !lastResult.connected
+                          }">
+                    </span>
+                    <span x-text="lastResult?.message || 'No test run yet'"></span>
+                </div>
+            </div>
+            <div x-show="lastResult?.error" class="text-red-600 text-sm">
+                Error: <span x-text="lastResult.error"></span>
+            </div>
+        </div>
+
+        <!-- Component Demo -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Step 1 Component Demo</h2>
+            <div x-data="step1Concept()" x-init="init()">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Book Concept</label>
+                    <textarea x-model="concept" @input="onConceptInput()" rows="3"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                        placeholder="Enter your book concept..."></textarea>
+                    <p class="text-sm text-gray-500 mt-1" x-text="`${characterCount}/1000 characters`"></p>
+                </div>
+
+                <div class="mb-4">
+                    <div class="text-sm">
+                        <strong>Validation:</strong>
+                        <span :class="isValid ? 'text-green-600' : 'text-red-600'"
+                            x-text="isValid ? 'Valid' : 'Invalid'">
+                        </span>
+                    </div>
+                    <div class="text-sm text-gray-600" x-text="helpText"></div>
+                </div>
+
+                <template x-for="error in validationErrors">
+                    <div class="text-red-600 text-sm mb-2" x-text="error"></div>
+                </template>
+
+                <button @click="submitConcept()" :disabled="!isValid || isSubmitting"
+                    class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 disabled:opacity-50">
+                    <span x-show="!isSubmitting">Test Concept Submission</span>
+                    <span x-show="isSubmitting">Submitting...</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Wizard Store Demo -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4">Wizard Store State</h2>
+            <div x-data="storeDemo()">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <strong>Current Step:</strong>
+                        <span x-text="$store.wizard.currentStep"></span>
+                    </div>
+                    <div>
+                        <strong>Session ID:</strong>
+                        <span x-text="$store.wizard.sessionId || 'None'"></span>
+                    </div>
+                    <div>
+                        <strong>Loading:</strong>
+                        <span x-text="$store.wizard.isLoading"></span>
+                    </div>
+                    <div>
+                        <strong>Error:</strong>
+                        <span x-text="$store.wizard.error || 'None'"></span>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <strong>Form Data:</strong>
+                    <pre class="bg-gray-100 p-2 rounded text-sm mt-2"
+                        x-text="JSON.stringify($store.wizard.formData, null, 2)"></pre>
+                </div>
+
+                <div class="flex gap-2">
+                    <button @click="$store.wizard.setCurrentStep(2)"
+                        class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                        Go to Step 2
+                    </button>
+                    <button @click="$store.wizard.setCurrentStep(1)"
+                        class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                        Go to Step 1
+                    </button>
+                    <button @click="$store.wizard.reset()"
+                        class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
+                        Reset Store
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Test Runner Component
+        function testRunner() {
+            return {
+                tests: [],
+                testResults: {
+                    passed: 0,
+                    failed: 0,
+                    warnings: 0
+                },
+
+                async runAllTests() {
+                    this.tests = [];
+                    this.testResults = { passed: 0, failed: 0, warnings: 0 };
+
+                    // Run each test
+                    await this.testAlpineJS();
+                    await this.testWizardStore();
+                    await this.testApiClient();
+                    await this.testStep1Component();
+                    await this.testNavigation();
+                    await this.testTailwind();
+
+                    // Calculate results
+                    this.tests.forEach(test => {
+                        this.testResults[test.status === 'pass' ? 'passed' : 
+                                       test.status === 'fail' ? 'failed' : 'warnings']++;
+                    });
+                },
+
+                addTest(name, description, status, message, details = null) {
+                    this.tests.push({
+                        name,
+                        description,
+                        status,
+                        message,
+                        details
+                    });
+                },
+
+                async testAlpineJS() {
+                    try {
+                        if (typeof Alpine !== 'undefined') {
+                            this.addTest(
+                                'Alpine.js Load Test',
+                                'Checks if Alpine.js is loaded and functional',
+                                'pass',
+                                'Alpine.js loaded successfully'
+                            );
+                        } else {
+                            this.addTest(
+                                'Alpine.js Load Test',
+                                'Checks if Alpine.js is loaded and functional',
+                                'fail',
+                                'Alpine.js not found'
+                            );
+                        }
+                    } catch (error) {
+                        this.addTest(
+                            'Alpine.js Load Test',
+                            'Checks if Alpine.js is loaded and functional',
+                            'fail',
+                            error.message
+                        );
+                    }
+                },
+
+                async testWizardStore() {
+                    try {
+                        if (Alpine.store('wizard')) {
+                            const store = Alpine.store('wizard');
+                            if (store.currentStep && store.formData && store.steps) {
+                                this.addTest(
+                                    'Wizard Store Test',
+                                    'Checks if wizard store is properly initialized',
+                                    'pass',
+                                    'Wizard store accessible and has required properties'
+                                );
+                            } else {
+                                this.addTest(
+                                    'Wizard Store Test',
+                                    'Checks if wizard store is properly initialized',
+                                    'warning',
+                                    'Wizard store missing some properties'
+                                );
+                            }
+                        } else {
+                            this.addTest(
+                                'Wizard Store Test',
+                                'Checks if wizard store is properly initialized',
+                                'fail',
+                                'Wizard store not found'
+                            );
+                        }
+                    } catch (error) {
+                        this.addTest(
+                            'Wizard Store Test',
+                            'Checks if wizard store is properly initialized',
+                            'fail',
+                            error.message
+                        );
+                    }
+                },
+
+                async testApiClient() {
+                    try {
+                        if (window.apiClient) {
+                            this.addTest(
+                                'API Client Test',
+                                'Checks if API client is loaded',
+                                'pass',
+                                'API client available'
+                            );
+                        } else {
+                            this.addTest(
+                                'API Client Test',
+                                'Checks if API client is loaded',
+                                'fail',
+                                'API client not found'
+                            );
+                        }
+                    } catch (error) {
+                        this.addTest(
+                            'API Client Test',
+                            'Checks if API client is loaded',
+                            'fail',
+                            error.message
+                        );
+                    }
+                },
+
+                async testStep1Component() {
+                    try {
+                        if (typeof step1Concept === 'function') {
+                            const component = step1Concept();
+                            if (component.concept !== undefined && 
+                                component.submitConcept &&
+                                component.validateConcept) {
+                                this.addTest(
+                                    'Step 1 Component Test',
+                                    'Checks if Step 1 component is properly defined',
+                                    'pass',
+                                    'Step 1 component has required methods and properties'
+                                );
+                            } else {
+                                this.addTest(
+                                    'Step 1 Component Test',
+                                    'Checks if Step 1 component is properly defined',
+                                    'warning',
+                                    'Step 1 component missing some methods'
+                                );
+                            }
+                        } else {
+                            this.addTest(
+                                'Step 1 Component Test',
+                                'Checks if Step 1 component is properly defined',
+                                'fail',
+                                'Step 1 component function not found'
+                            );
+                        }
+                    } catch (error) {
+                        this.addTest(
+                            'Step 1 Component Test',
+                            'Checks if Step 1 component is properly defined',
+                            'fail',
+                            error.message
+                        );
+                    }
+                },
+
+                async testNavigation() {
+                    try {
+                        if (typeof navigation === 'function') {
+                            this.addTest(
+                                'Navigation Component Test',
+                                'Checks if navigation component is loaded',
+                                'pass',
+                                'Navigation component available'
+                            );
+                        } else {
+                            this.addTest(
+                                'Navigation Component Test',
+                                'Checks if navigation component is loaded',
+                                'fail',
+                                'Navigation component not found'
+                            );
+                        }
+                    } catch (error) {
+                        this.addTest(
+                            'Navigation Component Test',
+                            'Checks if navigation component is loaded',
+                            'fail',
+                            error.message
+                        );
+                    }
+                },
+
+                async testTailwind() {
+                    try {
+                        // Create a test element to check if Tailwind classes work
+                        const testEl = document.createElement('div');
+                        testEl.className = 'bg-blue-500 text-white p-4';
+                        document.body.appendChild(testEl);
+                        
+                        const styles = window.getComputedStyle(testEl);
+                        const hasBlueBackground = styles.backgroundColor.includes('59, 130, 246') || 
+                                                 styles.backgroundColor.includes('rgb(59, 130, 246)');
+                        
+                        document.body.removeChild(testEl);
+                        
+                        if (hasBlueBackground) {
+                            this.addTest(
+                                'Tailwind CSS Test',
+                                'Checks if Tailwind CSS is working',
+                                'pass',
+                                'Tailwind CSS classes applying correctly'
+                            );
+                        } else {
+                            this.addTest(
+                                'Tailwind CSS Test',
+                                'Checks if Tailwind CSS is working',
+                                'warning',
+                                'Tailwind CSS may not be loaded or working correctly'
+                            );
+                        }
+                    } catch (error) {
+                        this.addTest(
+                            'Tailwind CSS Test',
+                            'Checks if Tailwind CSS is working',
+                            'fail',
+                            error.message
+                        );
+                    }
+                }
+            };
+        }
+
+        // API Connection Test Component
+        function apiConnectionTest() {
+            return {
+                isChecking: false,
+                lastResult: null,
+
+                async testConnection() {
+                    this.isChecking = true;
+                    try {
+                        this.lastResult = await window.apiClient.testConnection();
+                    } catch (error) {
+                        this.lastResult = {
+                            connected: false,
+                            error: error.message,
+                            message: 'Connection test failed'
+                        };
+                    } finally {
+                        this.isChecking = false;
+                    }
+                }
+            };
+        }
+
+        // Store Demo Component
+        function storeDemo() {
+            return {
+                // This component just displays store state
+            };
+        }
+    </script>
+</body>
+
+</html>

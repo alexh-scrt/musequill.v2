@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Musequill - Book Creation Wizard</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="./css/wizard.css">
+
+    <!-- Alpine.js Components -->
+    <script src="./js/stores/wizard-store.js"></script>
+    <script src="./js/utils/api-client.js"></script>
+    <script src="./js/components/progress-bar.js"></script>
+    <script src="./js/components/step-container.js"></script>
+    <script src="./js/components/navigation.js"></script>
+    <script src="./js/steps/step-1-concept.js"></script>
+    <script src="./js/steps/step-2-genre.js"></script>
+    <script src="./js/steps/step-3-audience.js"></script>
+    <script src="./js/steps/step-4-style.js"></script>
+    <script src="./js/steps/step-5-length.js"></script>
+    <script src="./js/steps/step-6-structure.js"></script>
+    <script src="./js/steps/step-7-world.js"></script>
+    <script src="./js/steps/step-8-content.js"></script>
+    <script src="./js/steps/step-9-summary.js"></script>
+</head>
+
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <!-- Main Wizard Container -->
+    <div x-data="wizardStore" x-init="initWizard()" class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">Musequill</h1>
+            <p class="text-lg text-gray-600">Create Your Book with AI Guidance</p>
+        </header>
+
+        <!-- Progress Bar Component -->
+        <div x-data="progressBar" class="mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold text-gray-800">Step <span
+                            x-text="$store.wizard.currentStep"></span> of <span
+                            x-text="$store.wizard.totalSteps"></span></h2>
+                    <div class="text-sm text-gray-500">
+                        <span x-text="Math.round(($store.wizard.currentStep / $store.wizard.totalSteps) * 100)"></span>%
+                        Complete
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="w-full bg-gray-200 rounded-full h-3 mb-4">
+                    <div class="bg-gradient-to-r from-blue-500 to-indigo-600 h-3 rounded-full transition-all duration-300"
+                        :style="`width: ${($store.wizard.currentStep / $store.wizard.totalSteps) * 100}%`"></div>
+                </div>
+
+                <!-- Step Indicators -->
+                <div class="flex justify-between">
+                    <template x-for="step in $store.wizard.steps" :key="step.number">
+                        <div class="flex flex-col items-center">
+                            <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-200"
+                                :class="{
+                                     'bg-blue-500 text-white': step.number <= $store.wizard.currentStep,
+                                     'bg-gray-200 text-gray-500': step.number > $store.wizard.currentStep
+                                 }">
+                                <span x-text="step.number"></span>
+                            </div>
+                            <div class="mt-2 text-xs text-center max-w-16">
+                                <span x-text="step.shortName" class="text-gray-600"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Wizard Content -->
+        <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+            <!-- Step Container -->
+            <div x-data="stepContainer" class="min-h-96">
+                <!-- Loading State -->
+                <div x-show="$store.wizard.isLoading" class="flex items-center justify-center h-96">
+                    <div class="text-center">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                        <p class="text-gray-600">Processing your request...</p>
+                    </div>
+                </div>
+
+                <!-- Error State -->
+                <div x-show="$store.wizard.error" class="p-8 text-center">
+                    <div class="bg-red-50 border border-red-200 rounded-lg p-6">
+                        <h3 class="text-lg font-semibold text-red-800 mb-2">Something went wrong</h3>
+                        <p class="text-red-600 mb-4" x-text="$store.wizard.error"></p>
+                        <button @click="$store.wizard.clearError()"
+                            class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                            Try Again
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step Content -->
+                <div x-show="!$store.wizard.isLoading && !$store.wizard.error">
+                    <!-- Step 1: Book Concept -->
+                    <div x-show="$store.wizard.currentStep === 1" x-data="step1Concept">
+                        <div class="p-8">
+                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Tell us about your book idea</h2>
+                            <p class="text-gray-600 mb-6">Describe your book concept in 2-3 sentences. This will help us
+                                guide you through the creation process.</p>
+
+                            <form @submit.prevent="submitConcept()">
+                                <div class="mb-6">
+                                    <label for="concept" class="block text-sm font-medium text-gray-700 mb-2">Book
+                                        Concept</label>
+                                    <textarea id="concept" x-model="concept" rows="4"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                        placeholder="Example: I want to write a fantasy novel about a young woman who discovers she has magical powers and must save her kingdom from an ancient evil..."
+                                        required></textarea>
+                                    <p class="text-sm text-gray-500 mt-1" x-text="`${concept.length}/1000 characters`">
+                                    </p>
+                                </div>
+
+                                <div class="mb-6">
+                                    <label for="additional_notes"
+                                        class="block text-sm font-medium text-gray-700 mb-2">Additional Notes
+                                        (Optional)</label>
+                                    <textarea id="additional_notes" x-model="additionalNotes" rows="2"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                        placeholder="Any specific themes, inspiration, or requirements you have in mind..."></textarea>
+                                </div>
+
+                                <div class="text-right">
+                                    <button type="submit" :disabled="concept.length < 10"
+                                        class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">
+                                        Start Creating My Book
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Genre Selection -->
+                    <div x-show="$store.wizard.currentStep === 2" x-data="step2Genre">
+                        <div class="p-8">
+                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Choose Your Genre</h2>
+                            <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                <template x-for="option in options" :key="option.id">
+                                    <div class="border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md"
+                                        :class="{
+                                             'border-blue-500 bg-blue-50': selectedGenre === option.id,
+                                             'border-gray-200 hover:border-gray-300': selectedGenre !== option.id
+                                         }" @click="selectGenre(option.id)">
+                                        <div class="flex items-start justify-between">
+                                            <div class="flex-1">
+                                                <h3 class="font-semibold text-gray-800" x-text="option.name"></h3>
+                                                <p class="text-sm text-gray-600 mt-1" x-text="option.description"></p>
+                                                <div x-show="option.market_appeal" class="mt-2">
+                                                    <span
+                                                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                                        :class="{
+                                                              'bg-green-100 text-green-800': option.market_appeal === 'High',
+                                                              'bg-yellow-100 text-yellow-800': option.market_appeal === 'Medium',
+                                                              'bg-gray-100 text-gray-800': option.market_appeal === 'Low'
+                                                          }" x-text="`${option.market_appeal} Market Appeal`">
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div x-show="option.recommendation_score" class="ml-4 text-right">
+                                                <div class="text-sm font-medium text-blue-600"
+                                                    x-text="`${Math.round(option.recommendation_score)}% Match`"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Additional steps will be loaded dynamically -->
+                    <template x-for="stepNum in [3, 4, 5, 6, 7, 8, 9]" :key="stepNum">
+                        <div x-show="$store.wizard.currentStep === stepNum" x-data="`step${stepNum}Data`">
+                            <div class="p-8">
+                                <h2 class="text-2xl font-bold text-gray-800 mb-4" x-text="stepTitle"></h2>
+                                <p class="text-gray-600 mb-6" x-text="stepDescription"></p>
+
+                                <!-- Dynamic step content will be loaded here -->
+                                <div class="text-center py-8">
+                                    <div class="animate-pulse">
+                                        <p class="text-gray-500">Loading step content...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <div x-data="navigation" class="bg-gray-50 px-8 py-4 border-t">
+                <div class="flex justify-between items-center">
+                    <button x-show="$store.wizard.currentStep > 1" @click="goToPreviousStep()"
+                        class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition-colors">
+                        <span class="flex items-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15 19l-7-7 7-7"></path>
+                            </svg>
+                            Previous
+                        </span>
+                    </button>
+
+                    <div x-show="$store.wizard.currentStep === 1"></div>
+
+                    <button
+                        x-show="$store.wizard.currentStep > 1 && $store.wizard.currentStep < $store.wizard.totalSteps"
+                        @click="goToNextStep()" :disabled="!canProceed()"
+                        class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">
+                        <span class="flex items-center">
+                            Next
+                            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7">
+                                </path>
+                            </svg>
+                        </span>
+                    </button>
+
+                    <button x-show="$store.wizard.currentStep === $store.wizard.totalSteps" @click="completeWizard()"
+                        class="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600 transition-colors">
+                        Complete Book Setup
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="text-center mt-8">
+            <p class="text-gray-500 text-sm">© 2024 Musequill - AI-Powered Book Creation</p>
+        </footer>
+    </div>
+</body>
+
+</html>
