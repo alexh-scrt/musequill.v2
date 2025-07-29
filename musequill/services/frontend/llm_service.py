@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class LLMService:
     """Service for LLM communication via Ollama."""
     
-    def __init__(self, model_name: str = "llama3.1", base_url: str = "http://localhost:11434"):
+    def __init__(self, model_name: str = "llama3.3:70b", base_url: str = "http://localhost:11434"):
         self.model_name = model_name
         self.base_url = base_url
         self.llm = None
@@ -34,7 +34,7 @@ class LLMService:
             self.llm = OllamaLLM(
                 model=self.model_name,
                 base_url=self.base_url,
-                temperature=0.3  # Lower temperature for more consistent suggestions
+                temperature=1.3  # Lower temperature for more consistent suggestions
             )
             logger.info(f"LLM service initialized with model: {self.model_name}")
         except Exception as e:
