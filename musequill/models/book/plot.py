@@ -536,6 +536,9 @@ class PlotType(str, Enum):
             self.TIME_TRAVEL: ["causality", "consequences", "free will", "paradox"],
             self.ENVIRONMENTAL_CRISIS: ["responsibility", "sustainability", "future", "activism"],
             self.MENTAL_HEALTH_JOURNEY: ["healing", "acceptance", "support", "recovery"],
+            self.EXPLORATION: ["adventure", "discovery", "curiosity", "unknown territories"],
+            self.TREASURE_HUNT: ["adventure", "discovery", "greed vs purpose", "perseverance"],
+            self.FORBIDDEN_LOVE: ["love", "sacrifice", "social barriers", "defiance"],
         }
         return theme_map.get(self, ["conflict", "growth", "resolution"])
     
