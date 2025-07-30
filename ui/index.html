@@ -367,7 +367,7 @@
                 </div>
 
                 <!-- Step 2: Genre Selection -->
-                <div x-show="$store.wizard.currentStep === 2" x-data="step2Genre" x-init="init()">
+                <div x-show="$store.wizard.currentStep === 2" x-data="step2Genre()" x-init="init()">
                     <div class="p-8">
                         <h2 class="text-2xl font-bold text-gray-800 mb-4">Choose Your Genre</h2>
                         <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
@@ -385,12 +385,11 @@
                                                 <span x-show="option.recommendation_score"
                                                     class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
                                                     x-text="formatRecommendationScore(option.recommendation_score)"></span>
-                                                <span x-show="option.market_appeal" class="text-sm text-blue-600"
-                                                    x-text="'Market: ' + option.market_appeal"></span>
+                                                <span x-show="option.commercial_appeal" class="text-sm text-blue-600"
+                                                    x-text="'Commercial: ' + option.commercial_appeal"></span>
                                             </div>
                                         </div>
-                                        <div x-show="selectedGenre === option.id"
-                                            class="ml-4 text-blue-500 flex-shrink-0">
+                                        <div x-show="selectedGenre === option.id" class="ml-4 text-blue-500 flex-shrink-0">
                                             <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
                                                 <path fill-rule="evenodd"
                                                     d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
@@ -400,6 +399,31 @@
                                     </div>
                                 </div>
                             </template>
+                        </div>
+
+                        <!-- Subgenre Options (if applicable) -->
+                        <div x-show="showSubgenres" x-transition class="mt-8">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-4">Choose a Subgenre</h3>
+                            <div class="space-y-3">
+                                <template x-for="subgenre in subgenreOptions" :key="subgenre.id">
+                                    <div @click="selectSubgenre(subgenre.id)" :class="getOptionClasses(subgenre.id)"
+                                        class="cursor-pointer transition-all duration-200">
+                                        <div class="flex justify-between items-start">
+                                            <div class="flex-1">
+                                                <h4 class="font-medium text-gray-800" x-text="subgenre.name"></h4>
+                                                <p class="text-gray-600 text-sm mt-1" x-text="subgenre.description"></p>
+                                            </div>
+                                            <div x-show="selectedSubgenre === subgenre.id" class="ml-4 text-blue-500 flex-shrink-0">
+                                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd"
+                                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                                        clip-rule="evenodd"></path>
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
                         </div>
 
                         <!-- Continue Button -->
@@ -717,39 +741,88 @@
                 </div>
 
                 <!-- Step 8: Content Preferences -->
-                <div x-show="$store.wizard.currentStep === 8" x-data="{ 
-                    llmMessage: 'Specify any content preferences or restrictions.',
-                    init() {
-                        console.log('Step 8 placeholder init - no API calls');
-                    }
-                }">
+                <div x-show="$store.wizard.currentStep === 8" x-data="step8Content()">
                     <div class="p-8">
                         <h2 class="text-2xl font-bold text-gray-800 mb-4">Content Preferences</h2>
                         <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
 
-                        <!-- Debug info for step 8 -->
-                        <div class="mb-4 p-2 bg-gray-100 rounded text-xs">
-                            <div>Step 8 Debug: Placeholder implementation</div>
+                        <!-- Debug info for step 8 (hidden by default) -->
+                        <div class="mb-4 p-2 bg-gray-100 rounded text-xs" x-show="false">
+                            <div>Step 8 Debug: Using step8Content() function</div>
                             <div>sessionId=<span x-text="$store.wizard.sessionId ? 'exists' : 'none'"></span></div>
+                            <div>currentStep=<span x-text="$store.wizard.currentStep"></span></div>
+                            <div>contentPreferences length=<span x-text="contentPreferences.length"></span></div>
+                            <button @click="logDebugInfo()" class="bg-blue-500 text-white px-2 py-1 rounded text-xs mt-1">
+                                Log Debug Info
+                            </button>
                         </div>
 
-                        <!-- Placeholder content -->
-                        <div class="text-center py-8">
-                            <div class="animate-pulse">
-                                <p class="text-gray-500">Step 8 (Content Preferences) - Under Construction</p>
-                                <p class="text-sm text-gray-400 mt-2">This step will be implemented soon.</p>
+                        <!-- Content Preferences Input -->
+                        <div class="mb-6">
+                            <label for="contentPreferences" class="block text-sm font-medium text-gray-700 mb-2">
+                                Content Preferences (Optional)
+                            </label>
+                            <textarea id="contentPreferences" x-model="contentPreferences" @input="updateContentPreferences()"
+                                placeholder="Enter any specific themes, content guidelines, or restrictions you'd like for your book..."
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 resize-vertical"
+                                rows="6" maxlength="1000"></textarea>
+
+                            <!-- Character count -->
+                            <div class="mt-2 flex justify-between text-sm">
+                                <span class="text-gray-500">Optional - helps tailor content to your preferences</span>
+                                <span :class="characterCountClass" x-text="`${characterCount}/1000 characters`"></span>
                             </div>
                         </div>
 
-                        <!-- Temporary continue button -->
-                        <div class="mt-8 flex justify-end">
-                            <button @click="$store.wizard.setCurrentStep(9)"
-                                class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
-                                Continue to Summary
+                        <!-- Suggestions (if available) -->
+                        <div x-show="suggestions.length > 0" class="mb-6">
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="text-sm font-medium text-gray-700">Suggested Content Guidelines</h3>
+                                <button @click="showSuggestions = !showSuggestions"
+                                    class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                                    <span x-show="!showSuggestions">Show Suggestions</span>
+                                    <span x-show="showSuggestions">Hide Suggestions</span>
+                                </button>
+                            </div>
+
+                            <div x-show="showSuggestions" x-transition class="space-y-2">
+                                <template x-for="suggestion in suggestions" :key="suggestion">
+                                    <div
+                                        class="flex items-start space-x-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                                        <button @click="applySuggestion(suggestion)"
+                                            class="flex-shrink-0 text-blue-600 hover:text-blue-800 text-xs font-medium mt-0.5">
+                                            Add
+                                        </button>
+                                        <span class="text-sm text-gray-700" x-text="suggestion"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Validation Error -->
+                        <div x-show="!isValid" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                            <p class="text-red-700 text-sm">Content preferences must be 1000 characters or less.</p>
+                        </div>
+
+                        <!-- Navigation -->
+                        <div class="flex justify-between">
+                            <!-- Back Button -->
+                            <button @click="goBack()"
+                                class="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors">
+                                ← Back to World Building
+                            </button>
+
+                            <!-- Continue Button -->
+                            <button @click="proceedToSummary()" :disabled="isSubmitting || !isValid"
+                                class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
+                                <span x-show="!isSubmitting">Continue to Summary</span>
+                                <span x-show="isSubmitting">Processing...</span>
                             </button>
                         </div>
                     </div>
                 </div>
+
+
 
                 <!-- Step 9: Final Summary -->
                 <div x-show="$store.wizard.currentStep === 9" x-data="{ 

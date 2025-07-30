@@ -1,6 +1,7 @@
 /**
  * Step 9: Final Summary Component
  * Displays complete book definition and handles wizard completion
+ * NOTE: Step 8 is actually the final API step, Step 9 just displays the summary
  */
 
 function step9Summary() {
@@ -10,7 +11,7 @@ function step9Summary() {
         summaryData: null,
         showValidation: false,
 
-        // Step data from API
+        // Step data from API (loaded from step 8 response)
         llmMessage: '',
         bookDefinition: null,
         researchPlan: null,
@@ -27,32 +28,21 @@ function step9Summary() {
             return this.isComplete && !this.isGenerating;
         },
 
-        // Methods
-        async generateBookDefinition() {
-            this.isGenerating = true;
-
-            try {
-                const success = await this.$store.wizard.processStep(
-                    9, // Step number
-                    'generate_final' // Signal to generate complete definition
-                );
-
-                if (success) {
-                    this.loadSummaryData();
-                }
-            } catch (error) {
-                console.error('Error generating book definition:', error);
-            } finally {
-                this.isGenerating = false;
-            }
+        get currentStepData() {
+            return this.$store.wizard.currentStepData;
         },
 
+        get formData() {
+            return this.$store.wizard.formData;
+        },
+
+        // Methods - NO API CALLS TO STEP 9!
         async finishWizard() {
             if (!this.canFinish) return;
 
             try {
                 // Update store with completion
-                this.$store.wizard.setComplete(true);
+                // this.$store.wizard.setComplete(true); // If this method exists
 
                 // You could navigate to a new page or show completion state
                 console.log('Wizard completed!', this.bookDefinition);
@@ -76,20 +66,32 @@ function step9Summary() {
             this.$store.wizard.setCurrentStep(stepNumber);
         },
 
-        // Data loading
+        // Data loading - NO API CALLS, just use data from step 8
         loadSummaryData() {
-            const stepData = this.$store.wizard.currentStepData;
-            const formData = this.$store.wizard.formData;
+            console.log('📥 Step9Summary - loadSummaryData called');
 
-            this.llmMessage = stepData.llmReasoning || 'Here\'s your commercial book blueprint:';
-            this.bookDefinition = stepData.bookDefinition || this.generateSummaryFromFormData();
-            this.researchPlan = stepData.researchPlan || null;
+            const stepData = this.currentStepData;
+            const formData = this.formData;
+
+            console.log('📥 Step9Summary - stepData:', stepData);
+            console.log('📥 Step9Summary - formData:', formData);
+
+            // Load data from step 8 response or generate from form data
+            this.llmMessage = stepData?.llmReasoning || stepData?.llm_reasoning || 'Here\'s your commercial book blueprint:';
+            this.bookDefinition = stepData?.bookDefinition || stepData?.book_definition || this.generateSummaryFromFormData();
+            this.researchPlan = stepData?.researchPlan || stepData?.research_plan || null;
+
+            console.log('📥 Step9Summary - Loaded llmMessage:', this.llmMessage);
+            console.log('📥 Step9Summary - Loaded bookDefinition:', this.bookDefinition);
+            console.log('📥 Step9Summary - Loaded researchPlan:', this.researchPlan);
         },
 
         generateSummaryFromFormData() {
-            const formData = this.$store.wizard.formData;
+            console.log('🔧 Step9Summary - generateSummaryFromFormData called');
 
-            return {
+            const formData = this.formData;
+
+            const summary = {
                 concept: formData.concept,
                 genre: {
                     primary: formData.genre,
@@ -105,6 +107,9 @@ function step9Summary() {
                 estimatedWritingTime: this.estimateWritingTime(formData),
                 commercialViability: this.assessCommercialViability(formData)
             };
+
+            console.log('🔧 Step9Summary - Generated summary:', summary);
+            return summary;
         },
 
         // Tab management
@@ -124,90 +129,67 @@ function step9Summary() {
             };
 
             const base = genreMap[formData.genre] || 'An engaging story';
-            const audience = formData.audience === 'young_adult' ? ' for young readers' : '';
-
-            return `${base}${audience} that explores themes of growth and discovery.`;
+            const audience = formData.audience === 'young_adult' ? ' for young adults' : '';
+            return `${base}${audience}`;
         },
 
         estimateWritingTime(formData) {
             const lengthMap = {
-                'novella': '2-4 months',
-                'short_novel': '4-6 months',
-                'standard_novel': '6-9 months',
-                'long_novel': '9-12 months',
-                'epic_length': '12+ months'
+                'short_story': '1-2 weeks',
+                'novella': '1-2 months',
+                'novel': '3-6 months',
+                'epic': '6-12 months'
             };
-
-            return lengthMap[formData.length] || '6-9 months';
+            return lengthMap[formData.length] || '3-6 months';
         },
 
         assessCommercialViability(formData) {
             // Simple scoring based on popular combinations
-            let score = 70; // Base score
+            let score = 5; // Base score
 
-            // Genre popularity adjustments
-            const genreBonus = {
-                'romance': 15,
-                'fantasy': 10,
-                'mystery': 8,
-                'thriller': 8,
-                'science_fiction': 5
-            };
-            score += genreBonus[formData.genre] || 0;
-
-            // Audience size adjustments
-            if (formData.audience === 'adult') score += 10;
-            if (formData.audience === 'young_adult') score += 8;
-
-            // Length optimization
-            if (formData.length === 'standard_novel') score += 5;
-
-            return Math.min(score, 95); // Cap at 95%
-        },
-
-        // Validation helpers
-        validateBookDefinition() {
-            const required = ['concept', 'genre', 'audience', 'style', 'length', 'structure', 'world'];
-            const formData = this.$store.wizard.formData;
-
-            const missing = required.filter(field => !formData[field] || formData[field].trim() === '');
-
-            if (missing.length > 0) {
-                return {
-                    isValid: false,
-                    missing: missing,
-                    message: `Missing required fields: ${missing.join(', ')}`
-                };
+            // Popular genres get bonus points
+            const popularGenres = ['romance', 'fantasy', 'mystery', 'thriller'];
+            if (popularGenres.includes(formData.genre)) {
+                score += 2;
             }
 
-            return { isValid: true, message: 'All required fields complete' };
-        },
-
-        // Formatting helpers
-        formatFieldName(fieldName) {
-            const nameMap = {
-                'concept': 'Book Concept',
-                'genre': 'Primary Genre',
-                'subgenre': 'Subgenre',
-                'audience': 'Target Audience',
-                'style': 'Writing Style',
-                'length': 'Book Length',
-                'structure': 'Story Structure',
-                'world': 'World/Setting',
-                'contentPreferences': 'Content Preferences'
-            };
-            return nameMap[fieldName] || fieldName;
-        },
-
-        formatValue(value) {
-            if (!value) return 'Not specified';
-            if (typeof value === 'string') {
-                return value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, ' ');
+            // Adult and YA audiences are commercially strong
+            if (['adult', 'young_adult'].includes(formData.audience)) {
+                score += 1;
             }
-            return String(value);
+
+            // Novel length is most commercial
+            if (formData.length === 'novel') {
+                score += 1;
+            }
+
+            return {
+                score: Math.min(10, score),
+                rating: score >= 7 ? 'High' : score >= 5 ? 'Medium' : 'Developing',
+                factors: this.getViabilityFactors(formData)
+            };
         },
 
-        // Research plan helpers
+        getViabilityFactors(formData) {
+            const factors = [];
+
+            const popularGenres = ['romance', 'fantasy', 'mystery', 'thriller'];
+            if (popularGenres.includes(formData.genre)) {
+                factors.push('Popular genre with strong market demand');
+            }
+
+            if (['adult', 'young_adult'].includes(formData.audience)) {
+                factors.push('Target audience with high reading engagement');
+            }
+
+            if (formData.length === 'novel') {
+                factors.push('Optimal length for commercial publishing');
+            }
+
+            return factors;
+        },
+
+        // Research plan utilities
         getResearchCategories() {
             if (!this.researchPlan) return [];
 
@@ -215,41 +197,43 @@ function step9Summary() {
                 {
                     name: 'Genre Research',
                     items: this.researchPlan.genre_research || [],
-                    description: 'Understanding your genre\'s conventions and reader expectations'
-                },
-                {
-                    name: 'World Building',
-                    items: this.researchPlan.world_research || [],
-                    description: 'Research needed for your chosen setting and world'
+                    description: 'Understanding market expectations and reader preferences'
                 },
                 {
                     name: 'Character Development',
                     items: this.researchPlan.character_research || [],
-                    description: 'Research to create authentic, compelling characters'
+                    description: 'Creating authentic, relatable characters'
                 },
                 {
-                    name: 'Plot & Structure',
+                    name: 'World Building',
+                    items: this.researchPlan.world_research || [],
+                    description: 'Developing your story\'s setting and atmosphere'
+                },
+                {
+                    name: 'Story Structure',
                     items: this.researchPlan.structure_research || [],
                     description: 'Understanding your chosen story structure and pacing'
                 }
             ];
         },
 
-        // Lifecycle
+        // Lifecycle - NO API CALLS!
         init() {
+            console.log('🚀 Step9Summary - INIT STARTED');
+            console.log('🚀 Step9Summary - Current step:', this.$store.wizard.currentStep);
+            console.log('🚀 Step9Summary - Session ID:', this.$store.wizard.sessionId);
+
+            // Load summary data from step 8 response (no API calls)
             this.loadSummaryData();
 
-            // If we don't have a complete definition, generate it
-            if (!this.bookDefinition && !this.isGenerating) {
-                this.generateBookDefinition();
-            }
+            console.log('🏁 Step9Summary - INIT COMPLETED (no API calls made)');
         },
 
         // Export functionality
         exportSummary() {
             const data = {
                 bookDefinition: this.bookDefinition,
-                formData: this.$store.wizard.formData,
+                formData: this.formData,
                 researchPlan: this.researchPlan,
                 generatedAt: new Date().toISOString()
             };
@@ -278,6 +262,20 @@ function step9Summary() {
                     alert('Book definition copied to clipboard!');
                 });
             }
+        },
+
+        // Debug helper
+        logDebugInfo() {
+            console.log('🔧 Step9Summary - DEBUG INFO:');
+            console.log('🔧 Current Step:', this.$store.wizard.currentStep);
+            console.log('🔧 Session ID:', this.$store.wizard.sessionId);
+            console.log('🔧 Current Step Data:', this.currentStepData);
+            console.log('🔧 Form Data:', this.formData);
+            console.log('🔧 Book Definition:', this.bookDefinition);
+            console.log('🔧 Research Plan:', this.researchPlan);
+            console.log('🔧 LLM Message:', this.llmMessage);
+            console.log('🔧 Is Complete:', this.isComplete);
+            console.log('🔧 Can Finish:', this.canFinish);
         }
     };
 }

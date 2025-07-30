@@ -73,7 +73,11 @@ class LLMService:
 
         You must use only a valid genre value from the list of examples. Do not use value GenreType as genre value.
 
-        Respond in JSON format with this exact structure:
+        Focuse strictly on the most relevant genre-subgenre combination provided and only return json response. 
+
+        Do not include anything else in your response.        
+
+        Respond in JSON format only and with this exact structure:
         {{
             "recommended_combinations": [
                 {{
@@ -139,14 +143,18 @@ class LLMService:
                     continue
                 
                 # Convert string values to enum types
-                genre = GenreType.from_string(combo["genre"].lower())
-                subgenre = SubGenreType.from_string(combo["subgenre"].lower())
-                
+                genre:GenreType = GenreType.from_string(combo["genre"].lower())
+                genre_description = genre.description
+                subgenre:SubGenreType = SubGenreType.from_string(combo["subgenre"].lower())
+                subgenre_description = subgenre.description
+
                 # Validate the combination exists
                 if GenreMapping.is_valid_combination(genre, subgenre):
                     validated_combinations.append({
                         "genre": genre,
+                        "genre_description": genre_description,
                         "subgenre": subgenre,
+                        "subgenre_description": subgenre_description,
                         "confidence": float(combo.get("confidence", 0.8)),
                         "reasoning": combo.get("reasoning", ""),
                         "display_name": f"{genre.display_name} - {subgenre.display_name}"
