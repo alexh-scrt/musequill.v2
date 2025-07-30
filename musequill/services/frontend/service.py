@@ -118,7 +118,7 @@ def create_app() -> FastAPI:
             session_id = session_manager.create_session(request.concept)
             
             # Analyze concept with LLM
-            concept_analysis = await llm_service.analyze_concept(request.concept)
+            concept_analysis = await llm_service.analyze_concept(concept=request.concept, additional_notes=request.additional_notes)
             
             # Process first step (genre selection)
             session = session_manager.get_session(session_id)

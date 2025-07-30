@@ -1,31 +1,14 @@
-/**
- * Wizard Store - Alpine.js Global State Management
- * Manages the wizard's state, session, and data flow
- */
-
+// Enhanced wizard store that stores LLM analysis response
 document.addEventListener('alpine:init', () => {
     Alpine.store('wizard', {
-        // Core State
+        // State
         currentStep: 1,
         totalSteps: 9,
         sessionId: null,
         isLoading: false,
         error: null,
 
-        // Step Configuration
-        steps: [
-            { number: 1, name: 'Book Concept', shortName: 'Concept', key: 'concept' },
-            { number: 2, name: 'Genre Selection', shortName: 'Genre', key: 'genre' },
-            { number: 3, name: 'Target Audience', shortName: 'Audience', key: 'audience' },
-            { number: 4, name: 'Writing Style', shortName: 'Style', key: 'style' },
-            { number: 5, name: 'Book Length', shortName: 'Length', key: 'length' },
-            { number: 6, name: 'Story Structure', shortName: 'Structure', key: 'structure' },
-            { number: 7, name: 'World Building', shortName: 'World', key: 'world' },
-            { number: 8, name: 'Content Preferences', shortName: 'Content', key: 'content' },
-            { number: 9, name: 'Final Summary', shortName: 'Summary', key: 'summary' }
-        ],
-
-        // Form Data
+        // Form data
         formData: {
             concept: '',
             additionalNotes: '',
@@ -39,7 +22,7 @@ document.addEventListener('alpine:init', () => {
             contentPreferences: ''
         },
 
-        // Current Step Data
+        // Current step information
         currentStepData: {
             question: '',
             options: [],
@@ -48,54 +31,79 @@ document.addEventListener('alpine:init', () => {
             isFinalStep: false
         },
 
-        // Book Summary
+        // Store the LLM concept analysis for later use
+        conceptAnalysis: null,
+
+        // Final book summary
         bookSummary: null,
 
-        // Methods
-        setLoading(loading) {
-            this.isLoading = loading;
+        // Getters/Computed
+        get stepKeys() {
+            return ['concept', 'genre', 'audience', 'style', 'length', 'structure', 'world', 'content'];
         },
 
-        setError(error) {
-            this.error = error;
-            this.isLoading = false;
+        get isComplete() {
+            return this.currentStep > this.totalSteps;
         },
 
-        clearError() {
-            this.error = null;
-        },
-
+        // State management methods
         setCurrentStep(step) {
-            if (step >= 1 && step <= this.totalSteps) {
-                this.currentStep = step;
-            }
+            this.currentStep = step;
         },
 
         setSessionId(sessionId) {
             this.sessionId = sessionId;
         },
 
-        updateFormData(key, value) {
-            this.formData[key] = value;
+        setLoading(loading) {
+            this.isLoading = loading;
+        },
+
+        setError(error) {
+            this.error = error;
+        },
+
+        clearError() {
+            this.error = null;
         },
 
         setStepData(stepData) {
             this.currentStepData = {
                 question: stepData.question || '',
                 options: stepData.options || [],
-                llmReasoning: stepData.llm_reasoning || '',
-                canGoBack: stepData.can_go_back || false,
-                isFinalStep: stepData.is_final_step || false
+                llmReasoning: stepData.llm_reasoning || stepData.llmReasoning || '',
+                canGoBack: stepData.can_go_back || stepData.canGoBack || false,
+                isFinalStep: stepData.is_final_step || stepData.isFinalStep || false
             };
         },
 
-        getStepByNumber(number) {
-            return this.steps.find(step => step.number === number);
+        setConceptAnalysis(analysis) {
+            this.conceptAnalysis = analysis;
+            console.log('Stored concept analysis:', analysis);
         },
 
+        setBookSummary(summary) {
+            this.bookSummary = summary;
+        },
+
+        updateFormData(key, value) {
+            this.formData[key] = value;
+        },
+
+        // Helper methods
         getCurrentStepKey() {
-            const step = this.getStepByNumber(this.currentStep);
-            return step ? step.key : null;
+            const stepMap = {
+                1: 'concept',
+                2: 'genre',
+                3: 'audience',
+                4: 'style',
+                5: 'length',
+                6: 'structure',
+                7: 'world',
+                8: 'content',
+                9: 'summary'
+            };
+            return stepMap[this.currentStep] || null;
         },
 
         hasSelection(stepKey) {
@@ -122,6 +130,19 @@ document.addEventListener('alpine:init', () => {
             return Math.round((this.currentStep / this.totalSteps) * 100);
         },
 
+        // Get genre recommendations from stored concept analysis
+        getGenreRecommendations() {
+            if (!this.conceptAnalysis || !this.conceptAnalysis.genre_recommendations) {
+                return [];
+            }
+            return this.conceptAnalysis.genre_recommendations;
+        },
+
+        // Get specific analysis results
+        getAnalysisField(field) {
+            return this.conceptAnalysis?.[field] || null;
+        },
+
         reset() {
             this.currentStep = 1;
             this.sessionId = null;
@@ -146,6 +167,7 @@ document.addEventListener('alpine:init', () => {
                 canGoBack: false,
                 isFinalStep: false
             };
+            this.conceptAnalysis = null;
             this.bookSummary = null;
         },
 
@@ -164,6 +186,11 @@ document.addEventListener('alpine:init', () => {
                     this.setSessionId(response.data.session_id);
                     this.updateFormData('concept', concept);
                     this.updateFormData('additionalNotes', additionalNotes);
+
+                    // Store the concept analysis for later use
+                    if (response.data.concept_analysis) {
+                        this.setConceptAnalysis(response.data.concept_analysis);
+                    }
 
                     // Set step data from response
                     if (response.data.first_step) {
@@ -185,11 +212,6 @@ document.addEventListener('alpine:init', () => {
         },
 
         async processStep(stepNumber, selection, additionalInput = '') {
-            if (!this.sessionId) {
-                this.setError('No active session. Please restart the wizard.');
-                return false;
-            }
-
             this.setLoading(true);
             this.clearError();
 
@@ -201,16 +223,18 @@ document.addEventListener('alpine:init', () => {
                 });
 
                 if (response.success) {
+                    // Update form data with selection
+                    const stepKey = this.getCurrentStepKey();
+                    if (stepKey && stepKey !== 'concept') {
+                        this.updateFormData(stepKey, selection);
+                    }
+
+                    // Set step data from response
                     this.setStepData(response.data);
 
-                    // Update form data
-                    const stepKey = this.getCurrentStepKey();
-                    if (stepKey) {
-                        if (stepKey === 'content') {
-                            this.updateFormData('contentPreferences', additionalInput);
-                        } else {
-                            this.updateFormData(stepKey, selection);
-                        }
+                    // If it's the final step, store book summary
+                    if (response.data.is_final_step && response.data.book_summary) {
+                        this.setBookSummary(response.data.book_summary);
                     }
 
                     return true;
@@ -274,6 +298,25 @@ document.addEventListener('alpine:init', () => {
         async loadStepData() {
             // For now, just return true - step data will be loaded when processing
             return true;
+        },
+
+        // Debug helper methods
+        logState() {
+            console.log('Wizard State:', {
+                currentStep: this.currentStep,
+                sessionId: this.sessionId,
+                formData: this.formData,
+                conceptAnalysis: this.conceptAnalysis,
+                currentStepData: this.currentStepData
+            });
+        },
+
+        logConceptAnalysis() {
+            if (this.conceptAnalysis) {
+                console.log('Concept Analysis:', this.conceptAnalysis);
+            } else {
+                console.log('No concept analysis stored');
+            }
         }
     });
 });
