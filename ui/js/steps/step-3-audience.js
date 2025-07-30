@@ -59,24 +59,28 @@ function step3Audience() {
             console.log('🚀 Step3Audience - Building enhancedOptions...');
             console.log('🚀 Step3Audience - hasConceptAnalysis:', this.hasConceptAnalysis);
             console.log('🚀 Step3Audience - currentStepData.options:', this.currentStepData?.options?.length || 0);
+            console.log('🚀 Step3Audience - this.options.length:', this.options?.length || 0);
 
             let baseOptions = [];
 
             // Use API data if available
             if (this.currentStepData?.options && this.currentStepData.options.length > 0) {
-                console.log('✨ Step3Audience - Using API options');
+                console.log('✨ Step3Audience - Using currentStepData.options');
                 baseOptions = this.currentStepData.options;
             } else if (this.options.length > 0) {
-                console.log('⚡ Step3Audience - Using component options');
+                console.log('⚡ Step3Audience - Using this.options');
                 baseOptions = this.options;
             } else {
                 console.log('⚠️ Step3Audience - Using fallback sample options');
                 baseOptions = this.getSampleAudiences();
             }
 
+            console.log('🚀 Step3Audience - baseOptions selected:', baseOptions);
+            console.log('🚀 Step3Audience - baseOptions length:', baseOptions?.length || 0);
+
             // Enhance options with analysis context
-            const enhancedOptions = baseOptions.map(option => {
-                console.log('🎯 Step3Audience - Processing option:', option);
+            const enhancedOptions = baseOptions.map((option, index) => {
+                console.log(`🎯 Step3Audience - Processing option ${index + 1}:`, option);
 
                 const enhanced = {
                     ...option,
@@ -87,11 +91,12 @@ function step3Audience() {
                     source: this.currentStepData?.options ? 'api_data' : 'component_fallback'
                 };
 
-                console.log('🎯 Step3Audience - Enhanced option:', enhanced);
+                console.log(`🎯 Step3Audience - Enhanced option ${index + 1}:`, enhanced);
                 return enhanced;
             });
 
             console.log('✨ Step3Audience - Final enhanced options:', enhancedOptions);
+            console.log('✨ Step3Audience - Final enhanced options count:', enhancedOptions?.length || 0);
             return enhancedOptions;
         },
 
@@ -388,6 +393,22 @@ function step3Audience() {
             // Load options from step data
             this.options = stepData.options || [];
             console.log('📥 Step3Audience - Set this.options:', this.options);
+            console.log('📥 Step3Audience - Options array length:', this.options.length);
+
+            // CRITICAL: Log the actual content of options array
+            if (this.options.length > 0) {
+                console.log('🔍 Step3Audience - Detailed options analysis:');
+                this.options.forEach((option, index) => {
+                    console.log(`🔍 Step3Audience - Option ${index + 1}:`, {
+                        id: option?.id || 'NO_ID',
+                        name: option?.name || 'NO_NAME',
+                        description: option?.description || 'NO_DESCRIPTION',
+                        complete_option: option
+                    });
+                });
+            } else {
+                console.log('❌ Step3Audience - Options array is empty!');
+            }
 
             // Set LLM message with context
             this.llmMessage = stepData.llmReasoning || this.getDefaultMessage();
@@ -396,7 +417,60 @@ function step3Audience() {
             // Load any existing selection
             this.selectedAudience = this.$store.wizard.formData.audience || '';
             console.log('📥 Step3Audience - Loaded selectedAudience:', this.selectedAudience);
+
+            // Check if we need to add children's options to API data
+            if (this.options.length > 0 && !this.hasChildrensOptions()) {
+                console.log('⚠️ Step3Audience - API data missing children options, supplementing...');
+                this.addChildrensOptionsToApiData();
+            }
+
+            console.log('📥 Step3Audience - Final options count:', this.options.length);
             console.log('📥 Step3Audience - loadStepData completed');
+        },
+
+        // Check if API data includes children's audience options
+        hasChildrensOptions() {
+            const childKeywords = ['picture', 'early', 'children', 'child', '3-', '4-', '5-', '6-', '7-'];
+            const hasChildOptions = this.options.some(option =>
+                childKeywords.some(keyword =>
+                (option.name?.toLowerCase().includes(keyword) ||
+                    option.description?.toLowerCase().includes(keyword) ||
+                    option.age_range?.includes(keyword))
+                )
+            );
+
+            console.log('🔍 Step3Audience - hasChildrensOptions:', hasChildOptions);
+            return hasChildOptions;
+        },
+
+        // Add children's options to API data if missing
+        addChildrensOptionsToApiData() {
+            const childrenOptions = [
+                {
+                    id: 'picture_book',
+                    name: 'Picture Book (3-7)',
+                    description: 'Perfect for bunny stories! Very young children learning to read with parent assistance',
+                    market_size: 'Medium',
+                    age_range: '3-7',
+                    characteristics: ['Simple language', 'Visual storytelling', 'Read-aloud friendly'],
+                    recommendation_score: 98, // Highest for bunny story
+                    source: 'supplemented'
+                },
+                {
+                    id: 'early_reader',
+                    name: 'Early Reader (5-8)',
+                    description: 'Ideal age group for animal adventure stories and learning about friendship',
+                    market_size: 'Medium',
+                    age_range: '5-8',
+                    characteristics: ['Simple vocabulary', 'Animal characters', 'Moral lessons'],
+                    recommendation_score: 95,
+                    source: 'supplemented'
+                }
+            ];
+
+            // Add children's options at the beginning
+            this.options = [...childrenOptions, ...this.options];
+            console.log('✅ Step3Audience - Added children options, new total:', this.options.length);
         },
 
         getDefaultMessage() {
@@ -529,6 +603,7 @@ function step3Audience() {
         getSampleAudiences() {
             console.log('📋 Step3Audience - getSampleAudiences called (fallback data)');
             const selectedGenre = this.selectedGenre;
+            console.log('📋 Step3Audience - selectedGenre for samples:', selectedGenre);
 
             // Base audiences that work for most genres
             const baseAudiences = [
@@ -564,18 +639,47 @@ function step3Audience() {
                 }
             ];
 
-            // Add middle grade for certain genres
-            if (['fantasy', 'adventure', 'mystery', 'coming_of_age'].includes(selectedGenre)) {
-                baseAudiences.push({
-                    id: 'middle_grade',
-                    name: 'Middle Grade (8-12)',
-                    description: 'Young readers discovering chapter books and adventure stories',
-                    market_size: 'Medium',
-                    age_range: '8-12',
-                    characteristics: ['Age-appropriate content', 'Adventure focus', 'Clear moral lessons'],
-                    recommendation_score: 88, // High for bunny story
-                    source: 'fallback'
-                });
+            // Add children's audiences for child-appropriate genres
+            if (['fantasy', 'adventure', 'mystery', 'coming_of_age', 'children'].includes(selectedGenre) ||
+                this.userConcept?.toLowerCase().includes('child') ||
+                this.userConcept?.toLowerCase().includes('bunny') ||
+                this.userConcept?.toLowerCase().includes('kids')) {
+
+                console.log('📋 Step3Audience - Adding children audiences for child-appropriate content');
+
+                // Add children's options at the beginning (highest priority)
+                baseAudiences.unshift(
+                    {
+                        id: 'picture_book',
+                        name: 'Picture Book (3-7)',
+                        description: 'Very young children learning to read with parent/caregiver assistance',
+                        market_size: 'Medium',
+                        age_range: '3-7',
+                        characteristics: ['Simple language', 'Visual storytelling', 'Read-aloud friendly', 'Moral lessons'],
+                        recommendation_score: 95, // Highest for bunny story
+                        source: 'fallback'
+                    },
+                    {
+                        id: 'early_reader',
+                        name: 'Early Reader (5-8)',
+                        description: 'Children developing independent reading skills',
+                        market_size: 'Medium',
+                        age_range: '5-8',
+                        characteristics: ['Simple vocabulary', 'Short chapters', 'Engaging characters', 'Age-appropriate themes'],
+                        recommendation_score: 92,
+                        source: 'fallback'
+                    },
+                    {
+                        id: 'middle_grade',
+                        name: 'Middle Grade (8-12)',
+                        description: 'Young readers discovering chapter books and adventure stories',
+                        market_size: 'Medium',
+                        age_range: '8-12',
+                        characteristics: ['Age-appropriate content', 'Adventure focus', 'Clear moral lessons'],
+                        recommendation_score: 88,
+                        source: 'fallback'
+                    }
+                );
             }
 
             console.log('📋 Step3Audience - Returning sample audiences:', baseAudiences);
@@ -650,6 +754,44 @@ function step3Audience() {
             console.log('🔧 Current Step Data:', this.$store.wizard.currentStepData);
             console.log('🔧 Is Loading:', this.$store.wizard.isLoading);
             console.log('🔧 Error:', this.$store.wizard.error);
+        },
+
+        // Debug method to check navigation state
+        logNavigationState() {
+            console.log('🧭 Step3Audience - NAVIGATION DEBUG:');
+            console.log('🧭 Current Step:', this.$store.wizard.currentStep);
+            console.log('🧭 Selected Audience:', this.selectedAudience);
+            console.log('🧭 Has Selection:', this.hasSelection);
+            console.log('🧭 Can Proceed:', this.canProceed);
+            console.log('🧭 Is Submitting:', this.isSubmitting);
+            console.log('🧭 Available Options Count:', this.enhancedOptions?.length || 0);
+            console.log('🧭 Form Data:', this.$store.wizard.formData);
+
+            // Check if wizard thinks we can proceed
+            console.log('🧭 Wizard canProceed():', this.$store.wizard.canProceed());
+
+            // Check enhanced options
+            if (this.enhancedOptions && this.enhancedOptions.length > 0) {
+                console.log('🧭 Available audience options:');
+                this.enhancedOptions.forEach((option, index) => {
+                    console.log(`🧭   ${index + 1}. ${option.id} - ${option.name} (score: ${option.recommendation_score})`);
+                });
+            }
+        },
+
+        // Helper method to manually test selection
+        testSelection(audienceId) {
+            console.log('🧪 Step3Audience - Testing selection:', audienceId);
+            console.log('🧪 Before - hasSelection:', this.hasSelection);
+            console.log('🧪 Before - canProceed:', this.canProceed);
+
+            this.selectedAudience = audienceId;
+            this.$store.wizard.updateFormData('audience', audienceId);
+
+            console.log('🧪 After - selectedAudience:', this.selectedAudience);
+            console.log('🧪 After - hasSelection:', this.hasSelection);
+            console.log('🧪 After - canProceed:', this.canProceed);
+            console.log('🧪 Wizard canProceed():', this.$store.wizard.canProceed());
         }
     };
 }

@@ -306,24 +306,268 @@
                         </div>
                     </div>
 
-                    <!-- Step 3: Target Audience -->
-                    <div x-show="$store.wizard.currentStep === 3" x-data="step3Audience">
+                    <!-- Step 3: Target Audience - COMPLETE IMPLEMENTATION -->
+                    <div x-show="$store.wizard.currentStep === 3" x-data="step3Audience" x-init="init()">
                         <div class="p-8">
                             <h2 class="text-2xl font-bold text-gray-800 mb-4">Select Your Target Audience</h2>
-                            <p class="text-gray-600 mb-6">Choose your target audience to optimize your book's market
-                                appeal and publishing strategy.</p>
+                            <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
 
-                            <!-- Step 3 content will be implemented here -->
-                            <div class="text-center py-8">
-                                <div class="animate-pulse">
-                                    <p class="text-gray-500">Loading audience options...</p>
+                            <!-- Debug Info (Remove in production) -->
+                            <div x-show="showAnalysisDetails"
+                                class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                <h3 class="font-semibold text-blue-800 mb-2">🔍 Analysis Details</h3>
+                                <div class="text-sm text-blue-700">
+                                    <div>Selected genre: "<span x-text="selectedGenre"></span>"</div>
+                                    <div>Selected subgenre: "<span x-text="selectedSubgenre"></span>"</div>
+                                    <div>Analysis successful: <span x-text="hasConceptAnalysis ? 'Yes' : 'No'"></span>
+                                    </div>
+                                    <div>Options available: <span x-text="enhancedOptions?.length || 0"></span></div>
                                 </div>
+                                <button @click="toggleAnalysisDetails()"
+                                    class="mt-2 text-xs text-blue-600 hover:text-blue-800">
+                                    Hide Details
+                                </button>
+                            </div>
+
+                            <!-- Audience Options - Using enhancedOptions from component -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                <!-- Show enhanced options if available -->
+                                <template x-for="option in enhancedOptions" :key="option.id"
+                                    x-show="enhancedOptions && enhancedOptions.length > 0">
+                                    <div class="border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md relative"
+                                        :class="getOptionClasses(option.id)" @click="selectAudience(option.id)"
+                                        @mouseenter="onOptionHover(option.id)" @mouseleave="onOptionLeave()">
+
+                                        <!-- Compatibility Badge -->
+                                        <div x-show="getCompatibilityBadge(option.id)" class="absolute top-2 right-2">
+                                            <span
+                                                class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+                                                :class="getCompatibilityBadge(option.id)?.classes || ''">
+                                                <span x-text="getCompatibilityBadge(option.id)?.text || ''"></span>
+                                            </span>
+                                        </div>
+
+                                        <div class="flex items-start justify-between">
+                                            <div class="flex-1 pr-4">
+                                                <h3 class="font-semibold text-gray-800" x-text="option.name"></h3>
+                                                <p class="text-sm text-gray-600 mt-1" x-text="option.description"></p>
+
+                                                <!-- Age Range -->
+                                                <div x-show="option.age_range" class="mt-2">
+                                                    <span
+                                                        class="inline-flex items-center px-2 py-1 rounded bg-gray-100 text-gray-700 text-xs">
+                                                        Ages: <span x-text="option.age_range"></span>
+                                                    </span>
+                                                </div>
+
+                                                <!-- Market Size Badge -->
+                                                <div x-show="option.market_size" class="mt-2">
+                                                    <span
+                                                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                                        :class="getMarketSizeBadgeClasses(option.market_size)"
+                                                        x-text="`${option.market_size} Market`">
+                                                    </span>
+                                                </div>
+
+                                                <!-- Characteristics -->
+                                                <div x-show="option.characteristics && option.characteristics.length > 0"
+                                                    class="mt-2">
+                                                    <div class="flex flex-wrap gap-1">
+                                                        <template
+                                                            x-for="characteristic in (option.characteristics || []).slice(0, 3)"
+                                                            :key="characteristic">
+                                                            <span
+                                                                class="inline-flex items-center px-2 py-1 rounded text-xs bg-blue-50 text-blue-700">
+                                                                <span x-text="characteristic"></span>
+                                                            </span>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Recommendation Score -->
+                                            <div x-show="option.recommendation_score" class="text-right">
+                                                <div class="text-sm font-medium text-blue-600"
+                                                    x-text="formatRecommendationScore(option.recommendation_score)">
+                                                </div>
+                                                <div x-show="option.source" class="text-xs text-gray-500 mt-1">
+                                                    <span
+                                                        x-text="option.source === 'api_data' ? 'AI Recommended' : 'Enhanced'"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- Fallback message if no options -->
+                                <div x-show="!enhancedOptions || enhancedOptions.length === 0"
+                                    class="col-span-full text-center py-8">
+                                    <div class="animate-pulse">
+                                        <div class="rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                                        <p class="text-gray-500">Loading audience options...</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Show Analysis Details Toggle -->
+                            <div x-show="hasConceptAnalysis && !showAnalysisDetails" class="mb-4">
+                                <button @click="toggleAnalysisDetails()"
+                                    class="text-sm text-blue-600 hover:text-blue-800">
+                                    🔍 Show Analysis Details
+                                </button>
+                            </div>
+
+                            <!-- Debug Button (Remove in production) -->
+                            <div class="mt-4 text-center">
+                                <button @click="logNavigationState()" class="text-xs text-gray-500 hover:text-gray-700">
+                                    Debug: Log Navigation State
+                                </button>
+                            </div>
+
+                            <!-- Loading State -->
+                            <div x-show="isSubmitting" class="text-center py-4">
+                                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2">
+                                </div>
+                                <p class="text-gray-600">Processing your selection...</p>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Steps 4-9: Placeholder templates for future implementation -->
-                    <template x-for="stepNum in [4, 5, 6, 7, 8, 9]" :key="stepNum">
+                    <!-- Step 4: Writing Style - COMPLETE IMPLEMENTATION -->
+                    <div x-show="$store.wizard.currentStep === 4" x-data="step4Style" x-init="init()">
+                        <div class="p-8">
+                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Select Your Writing Style</h2>
+                            <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
+
+                            <!-- Debug Info (Remove in production) -->
+                            <div x-show="showAnalysisDetails"
+                                class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                <h3 class="font-semibold text-blue-800 mb-2">🔍 Analysis Details</h3>
+                                <div class="text-sm text-blue-700">
+                                    <div>Selected genre: "<span x-text="selectedGenre"></span>"</div>
+                                    <div>Selected audience: "<span x-text="selectedAudience"></span>"</div>
+                                    <div>Analysis successful: <span x-text="hasConceptAnalysis ? 'Yes' : 'No'"></span>
+                                    </div>
+                                    <div>Options available: <span x-text="enhancedOptions?.length || 0"></span></div>
+                                </div>
+                                <button @click="toggleAnalysisDetails()"
+                                    class="mt-2 text-xs text-blue-600 hover:text-blue-800">
+                                    Hide Details
+                                </button>
+                            </div>
+
+                            <!-- Writing Style Options - Using enhancedOptions from component -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                <!-- Show enhanced options if available -->
+                                <template x-for="option in enhancedOptions" :key="option.id"
+                                    x-show="enhancedOptions && enhancedOptions.length > 0">
+                                    <div class="border rounded-lg p-6 cursor-pointer transition-all duration-200 hover:shadow-md relative"
+                                        :class="getOptionClasses(option.id)" @click="selectStyle(option.id)"
+                                        @mouseenter="onOptionHover(option.id)" @mouseleave="onOptionLeave()">
+
+                                        <!-- Compatibility Badge -->
+                                        <div x-show="getCompatibilityBadge(option.id)" class="absolute top-2 right-2">
+                                            <span
+                                                class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+                                                :class="getCompatibilityBadge(option.id)?.classes || ''">
+                                                <span x-text="getCompatibilityBadge(option.id)?.text || ''"></span>
+                                            </span>
+                                        </div>
+
+                                        <div class="flex flex-col h-full">
+                                            <!-- Style Header -->
+                                            <div class="flex-1">
+                                                <h3 class="font-semibold text-gray-800 text-lg mb-2"
+                                                    x-text="option.name"></h3>
+                                                <p class="text-sm text-gray-600 mb-3" x-text="option.description"></p>
+
+                                                <!-- Complexity Badge -->
+                                                <div x-show="option.complexity" class="mb-3">
+                                                    <span
+                                                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                                        :class="getComplexityBadgeClasses(option.complexity)"
+                                                        x-text="option.complexity">
+                                                    </span>
+                                                </div>
+
+                                                <!-- Characteristics -->
+                                                <div x-show="option.characteristics && option.characteristics.length > 0"
+                                                    class="mb-3">
+                                                    <div class="flex flex-wrap gap-1">
+                                                        <template
+                                                            x-for="characteristic in (option.characteristics || [])"
+                                                            :key="characteristic">
+                                                            <span
+                                                                class="inline-flex items-center px-2 py-1 rounded text-xs bg-blue-50 text-blue-700">
+                                                                <span x-text="characteristic"></span>
+                                                            </span>
+                                                        </template>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Example (if available) -->
+                                                <div x-show="option.example"
+                                                    class="mb-3 p-3 bg-gray-50 rounded italic text-sm">
+                                                    <strong>Example:</strong> <span x-text="option.example"></span>
+                                                </div>
+                                            </div>
+
+                                            <!-- Footer with Score -->
+                                            <div
+                                                class="flex justify-between items-center mt-auto pt-3 border-t border-gray-100">
+                                                <div x-show="option.market_appeal" class="text-xs text-gray-500">
+                                                    Market Appeal: <span x-text="option.market_appeal"></span>
+                                                </div>
+                                                <div x-show="option.recommendation_score" class="text-right">
+                                                    <div class="text-sm font-medium text-blue-600"
+                                                        x-text="formatRecommendationScore(option.recommendation_score)">
+                                                    </div>
+                                                    <div x-show="option.source" class="text-xs text-gray-500 mt-1">
+                                                        <span
+                                                            x-text="option.source === 'api_data' ? 'AI Recommended' : 'Enhanced'"></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- Fallback message if no options -->
+                                <div x-show="!enhancedOptions || enhancedOptions.length === 0"
+                                    class="col-span-full text-center py-8">
+                                    <div class="animate-pulse">
+                                        <div class="rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                                        <p class="text-gray-500">Loading writing style options...</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Show Analysis Details Toggle -->
+                            <div x-show="hasConceptAnalysis && !showAnalysisDetails" class="mb-4">
+                                <button @click="toggleAnalysisDetails()"
+                                    class="text-sm text-blue-600 hover:text-blue-800">
+                                    🔍 Show Analysis Details
+                                </button>
+                            </div>
+
+                            <!-- Debug Button (Remove in production) -->
+                            <div class="mt-4 text-center">
+                                <button @click="logNavigationState()" class="text-xs text-gray-500 hover:text-gray-700">
+                                    Debug: Log Navigation State
+                                </button>
+                            </div>
+
+                            <!-- Loading State -->
+                            <div x-show="isSubmitting" class="text-center py-4">
+                                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2">
+                                </div>
+                                <p class="text-gray-600">Processing your selection...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Steps 5-9: Placeholder templates for future implementation -->
+                    <template x-for="stepNum in [5, 6, 7, 8, 9]" :key="stepNum">
                         <div x-show="$store.wizard.currentStep === stepNum" x-data="`step${stepNum}Data`">
                             <div class="p-8">
                                 <h2 class="text-2xl font-bold text-gray-800 mb-4" x-text="stepTitle"></h2>
@@ -376,7 +620,7 @@
     <script>
         // Initialize API client when page loads
         document.addEventListener('DOMContentLoaded', function () {
-            window.apiClient = new ApiClient('http://musequill.ink:8000');
+            window.apiClient = new ApiClient('http://localhost:8000');
             console.log('API Client initialized');
         });
     </script>
