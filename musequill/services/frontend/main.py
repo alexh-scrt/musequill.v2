@@ -49,29 +49,57 @@ def create_frontend_app() -> FastAPI:
     Returns:
         FastAPI: Configured FastAPI application instance
     """
-    # Create the main app from frontend.py
+    # Create the main app from service.py
     app = create_app()
     
     # Add CORS middleware for web UI communication
+    # This must be added AFTER other middleware for proper order
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Configure appropriately for production
+        allow_origins=[
+            "http://localhost:8080",
+            "http://localhost:3000", 
+            "http://127.0.0.1:8080",
+            "http://127.0.0.1:3000",
+            "https://musequill.ink",
+            "http://musequill.ink",
+            "https://www.musequill.ink",
+            "http://www.musequill.ink",
+            "*"  # Allow all origins for development
+        ],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=[
+            "Accept",
+            "Accept-Language",
+            "Content-Language", 
+            "Content-Type",
+            "Authorization",
+            "X-Requested-With",
+            "X-Forwarded-For",
+            "X-Real-IP"
+        ],
+        expose_headers=["*"],
+        max_age=86400  # Cache preflight requests for 24 hours
     )
     
-    # Add startup and shutdown events
-    @app.on_event("startup")
-    async def startup_event():
-        """Initialize services on startup."""
+    # Modern lifespan events (replaces deprecated on_event)
+    from contextlib import asynccontextmanager
+    
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """Handle application lifespan events."""
+        # Startup
         logger.info("🚀 Musequill Frontend Service starting up...")
         logger.info("📚 Book Creation Wizard ready!")
+        logger.info("🌐 CORS configured for musequill.ink and development")
         
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        """Cleanup on shutdown."""
+        yield
+        
+        # Shutdown
         logger.info("📚 Musequill Frontend Service shutting down...")
+    
+    # Note: The actual lifespan will be applied in the enhanced service.py
     
     return app
 
@@ -95,6 +123,7 @@ async def main():
         logger.info(f"Server will start on http://{host}:{port}")
         logger.info("Wizard endpoints will be available at /wizard/")
         logger.info("API documentation available at /docs")
+        logger.info("🌐 Accepting CORS requests from musequill.ink")
         
         # Start the server
         config = uvicorn.Config(

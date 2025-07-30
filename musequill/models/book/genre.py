@@ -432,6 +432,9 @@ class SubGenreType(str, Enum):
     CELEBRITY_BIOGRAPHY = "celebrity_biography"
     HISTORICAL_BIOGRAPHY = "historical_biography"
 
+    #CHILDREN BOOKS
+    CHILDREN_BOOK = "children_book"
+
     @property
     def display_name(self) -> str:
         """Human-readable display name."""
@@ -529,6 +532,7 @@ class SubGenreType(str, Enum):
             "tech": cls.TECHNOLOGY_GUIDE,
             "crime": cls.TRUE_CRIME_SUB,
             "celebrity": cls.CELEBRITY_BIOGRAPHY,
+            "children_book": cls.CHILDREN_BOOK
         }
         
         # Check fuzzy matches
@@ -744,6 +748,11 @@ class GenreMapping:
             SubGenreType.YA_HISTORICAL,
             SubGenreType.HISTORICAL_BIOGRAPHY,
         },
+
+        GenreType.CHILDREN: {
+            SubGenreType.CHILDREN_BOOK,
+        },
+
     }
     
     @classmethod

@@ -33,6 +33,32 @@
 </head>
 
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <!-- Debug Panel (Remove in production) -->
+    <div x-data="{ showDebug: false }" class="fixed top-4 right-4 z-50">
+        <button @click="showDebug = !showDebug" class="bg-gray-800 text-white px-3 py-1 rounded text-sm">
+            Debug
+        </button>
+        <div x-show="showDebug"
+            class="absolute top-8 right-0 bg-white border rounded-lg shadow-lg p-4 w-80 max-h-96 overflow-auto">
+            <h3 class="font-bold mb-2">Wizard Store State</h3>
+            <div class="text-xs space-y-1">
+                <div><strong>Step:</strong> <span x-text="$store.wizard.currentStep"></span></div>
+                <div><strong>SessionId:</strong> <span x-text="$store.wizard.sessionId"></span></div>
+                <div><strong>Has Analysis:</strong> <span x-text="$store.wizard.conceptAnalysis ? 'Yes' : 'No'"></span>
+                </div>
+                <div><strong>Analysis Success:</strong>
+                    <span x-text="$store.wizard.conceptAnalysis?.analysis_successful ? 'Yes' : 'No'"></span>
+                </div>
+                <div><strong>Recommendations:</strong>
+                    <span x-text="$store.wizard.getGenreRecommendations()?.length || 0"></span>
+                </div>
+                <div><strong>Current Step Data:</strong>
+                    <span x-text="$store.wizard.currentStepData?.options?.length || 0"></span> options
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Wizard Container -->
     <div x-data="wizardStore" x-init="initWizard()" class="container mx-auto px-4 py-8">
         <!-- Header -->
@@ -58,24 +84,6 @@
                 <div class="w-full bg-gray-200 rounded-full h-3 mb-4">
                     <div class="bg-gradient-to-r from-blue-500 to-indigo-600 h-3 rounded-full transition-all duration-300"
                         :style="`width: ${($store.wizard.currentStep / $store.wizard.totalSteps) * 100}%`"></div>
-                </div>
-
-                <!-- Step Indicators -->
-                <div class="flex justify-between">
-                    <template x-for="step in $store.wizard.steps" :key="step.number">
-                        <div class="flex flex-col items-center">
-                            <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-200"
-                                :class="{
-                                     'bg-blue-500 text-white': step.number <= $store.wizard.currentStep,
-                                     'bg-gray-200 text-gray-500': step.number > $store.wizard.currentStep
-                                 }">
-                                <span x-text="step.number"></span>
-                            </div>
-                            <div class="mt-2 text-xs text-center max-w-16">
-                                <span x-text="step.shortName" class="text-gray-600"></span>
-                            </div>
-                        </div>
-                    </template>
                 </div>
             </div>
         </div>
@@ -104,87 +112,218 @@
                     </div>
                 </div>
 
-                <!-- Step Content -->
+                <!-- Step Content - Ensure only one step renders at a time -->
                 <div x-show="!$store.wizard.isLoading && !$store.wizard.error">
                     <!-- Step 1: Book Concept -->
                     <div x-show="$store.wizard.currentStep === 1" x-data="step1Concept">
                         <div class="p-8">
                             <h2 class="text-2xl font-bold text-gray-800 mb-4">Tell us about your book idea</h2>
-                            <p class="text-gray-600 mb-6">Describe your book concept in 2-3 sentences. This will help us
-                                guide you through the creation process.</p>
+                            <p class="text-gray-600 mb-6">Describe your book concept in 2-3 sentences.
+                                This will help us guide you through the creation process.</p>
+
+                            <!-- Show analysis results if available -->
+                            <div x-show="showAnalysis && hasAnalysis"
+                                class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                                <h3 class="font-semibold text-green-800 mb-2">✨ Analysis Complete!</h3>
+                                <p class="text-green-700 text-sm">
+                                    Found <span x-text="genreRecommendations?.length || 0"></span> genre
+                                    recommendations.
+                                    Ready to proceed to genre selection.
+                                </p>
+                            </div>
 
                             <form @submit.prevent="submitConcept()">
-                                <div class="mb-6">
-                                    <label for="concept" class="block text-sm font-medium text-gray-700 mb-2">Book
-                                        Concept</label>
-                                    <textarea id="concept" x-model="concept" rows="4"
+                                <div class="mb-4">
+                                    <label for="concept" class="block text-sm font-medium text-gray-700 mb-2">
+                                        Book Concept *
+                                    </label>
+                                    <textarea id="concept" x-model="concept" @input="onConceptInput()" rows="4"
                                         class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                                        placeholder="Example: I want to write a fantasy novel about a young woman who discovers she has magical powers and must save her kingdom from an ancient evil..."
-                                        required></textarea>
-                                    <p class="text-sm text-gray-500 mt-1" x-text="`${concept.length}/1000 characters`">
-                                    </p>
+                                        placeholder="Example: A young detective in Victorian London discovers that supernatural forces are behind a series of mysterious murders plaguing the city."
+                                        :disabled="isSubmitting">
+                                    </textarea>
+                                    <div class="flex justify-between mt-1">
+                                        <p class="text-sm text-gray-500" x-text="helpText"></p>
+                                        <p class="text-sm text-gray-500" x-text="`${characterCount}/1000 characters`">
+                                        </p>
+                                    </div>
                                 </div>
 
                                 <div class="mb-6">
-                                    <label for="additional_notes"
-                                        class="block text-sm font-medium text-gray-700 mb-2">Additional Notes
-                                        (Optional)</label>
-                                    <textarea id="additional_notes" x-model="additionalNotes" rows="2"
+                                    <label for="additionalNotes" class="block text-sm font-medium text-gray-700 mb-2">
+                                        Additional Notes (Optional)
+                                    </label>
+                                    <textarea id="additionalNotes" x-model="additionalNotes" @input="onNotesInput()"
+                                        rows="2"
                                         class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                                        placeholder="Any specific themes, inspiration, or requirements you have in mind..."></textarea>
+                                        placeholder="Any specific themes, content preferences, or additional context..."
+                                        :disabled="isSubmitting">
+                                    </textarea>
                                 </div>
 
-                                <div class="text-right">
-                                    <button type="submit" :disabled="concept.length < 10"
-                                        class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">
-                                        Start Creating My Book
+                                <template x-for="error in validationErrors" :key="error">
+                                    <div class="text-red-600 text-sm mb-4" x-text="error"></div>
+                                </template>
+
+                                <div class="flex justify-between items-center">
+                                    <div class="flex space-x-2">
+                                        <button type="button" @click="clearForm()"
+                                            class="text-gray-500 hover:text-gray-700 text-sm">
+                                            Clear Form
+                                        </button>
+                                    </div>
+                                    <button type="submit" :disabled="!isValid || isSubmitting"
+                                        class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                                        <span x-show="!isSubmitting">Start Creating My Book</span>
+                                        <span x-show="isSubmitting">Analyzing Concept...</span>
                                     </button>
                                 </div>
                             </form>
                         </div>
                     </div>
 
-                    <!-- Step 2: Genre Selection -->
-                    <div x-show="$store.wizard.currentStep === 2" x-data="step2Genre">
+                    <!-- Step 2: Genre Selection - COMPLETE IMPLEMENTATION -->
+                    <div x-show="$store.wizard.currentStep === 2" x-data="step2Genre" x-init="init()">
                         <div class="p-8">
                             <h2 class="text-2xl font-bold text-gray-800 mb-4">Choose Your Genre</h2>
                             <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
 
+                            <!-- Debug Info (Remove in production) -->
+                            <div x-show="showAnalysisDetails"
+                                class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                <h3 class="font-semibold text-blue-800 mb-2">🔍 Analysis Details</h3>
+                                <div class="text-sm text-blue-700">
+                                    <div>Original concept: "<span x-text="userConcept"></span>"</div>
+                                    <div>Analysis successful: <span x-text="hasConceptAnalysis ? 'Yes' : 'No'"></span>
+                                    </div>
+                                    <div>Recommendations found: <span x-text="genreRecommendations?.length || 0"></span>
+                                    </div>
+                                </div>
+                                <button @click="toggleAnalysisDetails()"
+                                    class="mt-2 text-xs text-blue-600 hover:text-blue-800">
+                                    Hide Details
+                                </button>
+                            </div>
+
+                            <!-- Genre Options - Using enhancedOptions from component -->
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                <template x-for="option in options" :key="option.id">
-                                    <div class="border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md"
-                                        :class="{
-                                             'border-blue-500 bg-blue-50': selectedGenre === option.id,
-                                             'border-gray-200 hover:border-gray-300': selectedGenre !== option.id
-                                         }" @click="selectGenre(option.id)">
+                                <!-- Show enhanced options if available -->
+                                <template x-for="option in enhancedOptions" :key="option.id"
+                                    x-show="enhancedOptions && enhancedOptions.length > 0">
+                                    <div class="border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md relative"
+                                        :class="getOptionClasses(option.id)" @click="selectGenre(option.id)"
+                                        @mouseenter="onOptionHover(option.id)" @mouseleave="onOptionLeave()">
+
+                                        <!-- AI Recommended Badge -->
+                                        <div x-show="getRecommendationBadge(option)" class="absolute top-2 right-2">
+                                            <span
+                                                class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+                                                :class="getRecommendationBadge(option)?.classes || ''">
+                                                <span x-text="getRecommendationBadge(option)?.text || ''"></span>
+                                            </span>
+                                        </div>
+
                                         <div class="flex items-start justify-between">
-                                            <div class="flex-1">
+                                            <div class="flex-1 pr-4">
                                                 <h3 class="font-semibold text-gray-800" x-text="option.name"></h3>
                                                 <p class="text-sm text-gray-600 mt-1" x-text="option.description"></p>
+
+                                                <!-- Market Appeal Badge -->
                                                 <div x-show="option.market_appeal" class="mt-2">
                                                     <span
                                                         class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                                                        :class="{
-                                                              'bg-green-100 text-green-800': option.market_appeal === 'High',
-                                                              'bg-yellow-100 text-yellow-800': option.market_appeal === 'Medium',
-                                                              'bg-gray-100 text-gray-800': option.market_appeal === 'Low'
-                                                          }" x-text="`${option.market_appeal} Market Appeal`">
+                                                        :class="getMarketAppealBadgeClasses(option.market_appeal)"
+                                                        x-text="`${option.market_appeal} Market Appeal`">
                                                     </span>
                                                 </div>
+
+                                                <!-- LLM Reasoning (for AI recommendations) -->
+                                                <div x-show="option.reasoning && option.source === 'llm_analysis'"
+                                                    class="mt-2 text-xs text-gray-500 italic">
+                                                    "<span x-text="option.reasoning"></span>"
+                                                </div>
                                             </div>
-                                            <div x-show="option.recommendation_score" class="ml-4 text-right">
+
+                                            <!-- Recommendation Score -->
+                                            <div x-show="option.recommendation_score" class="text-right">
                                                 <div class="text-sm font-medium text-blue-600"
-                                                    x-text="`${Math.round(option.recommendation_score)}% Match`"></div>
+                                                    x-text="formatRecommendationScore(option.recommendation_score)">
+                                                </div>
+                                                <div x-show="option.confidence" class="text-xs text-gray-500">
+                                                    Confidence: <span
+                                                        x-text="Math.round((option.confidence || 0) * 100)"></span>%
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </template>
+
+                                <!-- Fallback message if no options -->
+                                <div x-show="!enhancedOptions || enhancedOptions.length === 0"
+                                    class="col-span-full text-center py-8">
+                                    <div class="animate-pulse">
+                                        <div class="rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                                        <p class="text-gray-500">Loading genre recommendations...</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Show Analysis Details Toggle -->
+                            <div x-show="hasConceptAnalysis && !showAnalysisDetails" class="mb-4">
+                                <button @click="toggleAnalysisDetails()"
+                                    class="text-sm text-blue-600 hover:text-blue-800">
+                                    🔍 Show Analysis Details
+                                </button>
+                            </div>
+
+                            <!-- Debug Button (Remove in production) -->
+                            <div class="mt-4 text-center">
+                                <button @click="logAnalysisData()" class="text-xs text-gray-500 hover:text-gray-700">
+                                    Debug: Log Analysis Data
+                                </button>
+                            </div>
+
+                            <!-- Subgenres (if shown) -->
+                            <div x-show="showSubgenres" class="mt-8">
+                                <h3 class="text-lg font-semibold text-gray-800 mb-4">Select a Subgenre</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <template x-for="subgenre in subgenreOptions" :key="subgenre.id">
+                                        <div class="border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md"
+                                            :class="getOptionClasses(subgenre.id)" @click="selectSubgenre(subgenre.id)">
+                                            <h4 class="font-medium text-gray-800" x-text="subgenre.name"></h4>
+                                            <p class="text-sm text-gray-600 mt-1" x-text="subgenre.description"></p>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Loading State -->
+                            <div x-show="isSubmitting" class="text-center py-4">
+                                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2">
+                                </div>
+                                <p class="text-gray-600">Processing your selection...</p>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Additional steps will be loaded dynamically -->
-                    <template x-for="stepNum in [3, 4, 5, 6, 7, 8, 9]" :key="stepNum">
+                    <!-- Step 3: Target Audience -->
+                    <div x-show="$store.wizard.currentStep === 3" x-data="step3Audience">
+                        <div class="p-8">
+                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Select Your Target Audience</h2>
+                            <p class="text-gray-600 mb-6">Choose your target audience to optimize your book's market
+                                appeal and publishing strategy.</p>
+
+                            <!-- Step 3 content will be implemented here -->
+                            <div class="text-center py-8">
+                                <div class="animate-pulse">
+                                    <p class="text-gray-500">Loading audience options...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Steps 4-9: Placeholder templates for future implementation -->
+                    <template x-for="stepNum in [4, 5, 6, 7, 8, 9]" :key="stepNum">
                         <div x-show="$store.wizard.currentStep === stepNum" x-data="`step${stepNum}Data`">
                             <div class="p-8">
                                 <h2 class="text-2xl font-bold text-gray-800 mb-4" x-text="stepTitle"></h2>
@@ -205,45 +344,42 @@
             <!-- Navigation -->
             <div x-data="navigation" class="bg-gray-50 px-8 py-4 border-t">
                 <div class="flex justify-between items-center">
-                    <button x-show="$store.wizard.currentStep > 1" @click="goToPreviousStep()"
-                        class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition-colors">
-                        <span class="flex items-center">
-                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M15 19l-7-7 7-7"></path>
-                            </svg>
-                            Previous
-                        </span>
+                    <button @click="goBack()" x-show="$store.wizard.currentStep > 1"
+                        class="flex items-center px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7">
+                            </path>
+                        </svg>
+                        Back
                     </button>
 
-                    <div x-show="$store.wizard.currentStep === 1"></div>
+                    <div class="text-sm text-gray-500">
+                        Step <span x-text="$store.wizard.currentStep"></span> of <span
+                            x-text="$store.wizard.totalSteps"></span>
+                    </div>
 
-                    <button
-                        x-show="$store.wizard.currentStep > 1 && $store.wizard.currentStep < $store.wizard.totalSteps"
-                        @click="goToNextStep()" :disabled="!canProceed()"
-                        class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">
-                        <span class="flex items-center">
-                            Next
-                            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7">
-                                </path>
-                            </svg>
-                        </span>
-                    </button>
-
-                    <button x-show="$store.wizard.currentStep === $store.wizard.totalSteps" @click="completeWizard()"
-                        class="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600 transition-colors">
-                        Complete Book Setup
+                    <button @click="goNext()"
+                        x-show="$store.wizard.currentStep < $store.wizard.totalSteps && $store.wizard.canProceed()"
+                        class="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                        Next
+                        <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7">
+                            </path>
+                        </svg>
                     </button>
                 </div>
             </div>
         </div>
-
-        <!-- Footer -->
-        <footer class="text-center mt-8">
-            <p class="text-gray-500 text-sm">© 2024 Musequill - AI-Powered Book Creation</p>
-        </footer>
     </div>
+
+    <!-- Initialize API Client -->
+    <script>
+        // Initialize API client when page loads
+        document.addEventListener('DOMContentLoaded', function () {
+            window.apiClient = new ApiClient('http://musequill.ink:8000');
+            console.log('API Client initialized');
+        });
+    </script>
 </body>
 
 </html>
