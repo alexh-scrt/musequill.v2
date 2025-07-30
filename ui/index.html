@@ -30,6 +30,212 @@
     <script src="./js/steps/step-7-world.js"></script>
     <script src="./js/steps/step-8-content.js"></script>
     <script src="./js/steps/step-9-summary.js"></script>
+
+    <!-- Enhanced Step 6 and 7 Components -->
+    <script>
+        // Enhanced step-6-structure.js implementation
+        function step6Structure() {
+            return {
+                selectedStructure: '', isSubmitting: false, options: [], llmMessage: '', hoveredOption: null,
+                get hasSelection() { return this.selectedStructure !== ''; },
+                get canProceed() { return this.hasSelection; },
+                get currentStepData() { return this.$store.wizard.currentStepData; },
+                get selectedGenre() { return this.$store.wizard.formData.genre; },
+                async selectStructure(structureId) {
+                    this.selectedStructure = structureId;
+                    this.$store.wizard.updateFormData('structure', structureId);
+                    await this.processStructureSelection();
+                },
+                async processStructureSelection() {
+                    if (!this.selectedStructure) return;
+                    this.isSubmitting = true;
+                    try {
+                        const success = await this.$store.wizard.processStep(6, this.selectedStructure);
+                        if (success) await this.proceedToNextStep();
+                    } catch (error) {
+                        console.error('Error processing structure selection:', error);
+                    } finally { this.isSubmitting = false; }
+                },
+                async proceedToNextStep() {
+                    this.$store.wizard.setCurrentStep(7);
+                    await this.loadWorldBuildingData();
+                },
+                async loadWorldBuildingData() {
+                    try { await this.$store.wizard.processStep(7, null); }
+                    catch (error) { console.error('Error loading world building data:', error); }
+                },
+                loadStepData() {
+                    const stepData = this.$store.wizard.currentStepData;
+                    if (stepData && stepData.options && stepData.options.length > 0) {
+                        this.options = stepData.options;
+                    } else if (this.options.length === 0) {
+                        this.options = this.getSampleStructures();
+                    }
+                    this.llmMessage = stepData?.llmReasoning || this.getDefaultMessage();
+                    this.selectedStructure = this.$store.wizard.formData.structure || '';
+                },
+                getDefaultMessage() {
+                    return `These proven structures work excellently for ${this.selectedGenre || 'your chosen genre'} books:`;
+                },
+                init() {
+                    if (this.$store.wizard.currentStep !== 6) return;
+                    this.options = this.getSampleStructures();
+                    this.llmMessage = this.getDefaultMessage();
+                    if (!this.$store.wizard.sessionId) return;
+                    this.loadStepData();
+                },
+                async onStepVisible() {
+                    if (this.$store.wizard.currentStep !== 6) return;
+                    await this.$nextTick();
+                    const freshStepData = this.$store.wizard.currentStepData;
+                    if (freshStepData && freshStepData.options && freshStepData.options.length > 0) {
+                        this.options = freshStepData.options;
+                        this.llmMessage = freshStepData.llmReasoning || this.getDefaultMessage();
+                        return;
+                    }
+                    if (this.options.length === 0) {
+                        this.options = this.getSampleStructures();
+                        this.llmMessage = this.getDefaultMessage();
+                    }
+                },
+                getSampleStructures() {
+                    const baseStructures = [
+                        { id: 'three_act', name: 'Three-Act Structure', description: 'Classic beginning, middle, end with clear turning points', recommendation_score: 85, difficulty: 'easy', commercial_appeal: 'Very High', why_recommended: 'Time-tested structure with proven commercial success' },
+                        { id: 'heros_journey', name: "Hero's Journey", description: 'Character transformation through challenges and growth', recommendation_score: 80, difficulty: 'medium', commercial_appeal: 'High', why_recommended: 'Deeply satisfying character arc that resonates with readers' },
+                        { id: 'save_the_cat', name: 'Save the Cat! Structure', description: '15-beat structure optimized for commercial storytelling', recommendation_score: 90, difficulty: 'easy', commercial_appeal: 'Very High', why_recommended: 'Designed specifically for commercial success' }
+                    ];
+                    if (this.selectedGenre === 'romance') {
+                        baseStructures.push({ id: 'romance_arc', name: 'Romance Beat Sheet', description: 'Specialized structure for romantic relationship development', recommendation_score: 95, difficulty: 'easy', commercial_appeal: 'Excellent', why_recommended: 'Proven formula for romance genre success' });
+                    }
+                    return baseStructures;
+                },
+                getStructureCardClass(structure) {
+                    let baseClass = 'p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ';
+                    if (this.selectedStructure === structure.id) baseClass += 'border-blue-500 bg-blue-50 shadow-md ';
+                    else if (this.hoveredOption === structure.id) baseClass += 'border-gray-300 bg-gray-50 shadow-sm ';
+                    else baseClass += 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 ';
+                    return baseClass;
+                },
+                getRecommendationBadgeClass(score) {
+                    if (score >= 90) return 'bg-green-100 text-green-800';
+                    if (score >= 80) return 'bg-blue-100 text-blue-800';
+                    if (score >= 70) return 'bg-yellow-100 text-yellow-800';
+                    return 'bg-gray-100 text-gray-800';
+                },
+                getDifficultyBadgeClass(difficulty) {
+                    const classes = { 'easy': 'bg-green-100 text-green-800', 'medium': 'bg-yellow-100 text-yellow-800', 'hard': 'bg-red-100 text-red-800' };
+                    return classes[difficulty] || 'bg-gray-100 text-gray-800';
+                },
+                formatRecommendationScore(score) { return score ? `${Math.round(score)}% Match` : null; },
+                formatDifficulty(difficulty) {
+                    const difficultyMap = { 'easy': 'Easy to Execute', 'medium': 'Moderate Complexity', 'hard': 'Advanced Structure' };
+                    return difficultyMap[difficulty] || difficulty;
+                }
+            };
+        }
+
+        // Enhanced step-7-world.js implementation
+        function step7World() {
+            return {
+                selectedWorld: '', isSubmitting: false, options: [], llmMessage: '', hoveredOption: null,
+                get hasSelection() { return this.selectedWorld !== ''; },
+                get canProceed() { return this.hasSelection; },
+                get currentStepData() { return this.$store.wizard.currentStepData; },
+                get selectedGenre() { return this.$store.wizard.formData.genre; },
+                async selectWorld(worldId) {
+                    this.selectedWorld = worldId;
+                    this.$store.wizard.updateFormData('world', worldId);
+                    await this.processWorldSelection();
+                },
+                async processWorldSelection() {
+                    if (!this.selectedWorld) return;
+                    this.isSubmitting = true;
+                    try {
+                        const success = await this.$store.wizard.processStep(7, this.selectedWorld);
+                        if (success) await this.proceedToNextStep();
+                    } catch (error) {
+                        console.error('Error processing world selection:', error);
+                    } finally { this.isSubmitting = false; }
+                },
+                async proceedToNextStep() {
+                    this.$store.wizard.setCurrentStep(8);
+                    await this.loadContentPreferencesData();
+                },
+                async loadContentPreferencesData() {
+                    try { await this.$store.wizard.processStep(8, null); }
+                    catch (error) { console.error('Error loading content preferences data:', error); }
+                },
+                loadStepData() {
+                    const stepData = this.$store.wizard.currentStepData;
+                    if (stepData && stepData.options && stepData.options.length > 0) {
+                        this.options = stepData.options;
+                    } else if (this.options.length === 0) {
+                        this.options = this.getSampleWorlds();
+                    }
+                    this.llmMessage = stepData?.llmReasoning || this.getDefaultMessage();
+                    this.selectedWorld = this.$store.wizard.formData.world || '';
+                },
+                getDefaultMessage() {
+                    return `For your ${this.selectedGenre || 'chosen genre'} story, these settings offer commercial appeal:`;
+                },
+                init() {
+                    if (this.$store.wizard.currentStep !== 7) return;
+                    this.options = this.getSampleWorlds();
+                    this.llmMessage = this.getDefaultMessage();
+                    if (!this.$store.wizard.sessionId) return;
+                    this.loadStepData();
+                },
+                async onStepVisible() {
+                    if (this.$store.wizard.currentStep !== 7) return;
+                    await this.$nextTick();
+                    const freshStepData = this.$store.wizard.currentStepData;
+                    if (freshStepData && freshStepData.options && freshStepData.options.length > 0) {
+                        this.options = freshStepData.options;
+                        this.llmMessage = freshStepData.llmReasoning || this.getDefaultMessage();
+                        return;
+                    }
+                    if (this.options.length === 0) {
+                        this.options = this.getSampleWorlds();
+                        this.llmMessage = this.getDefaultMessage();
+                    }
+                },
+                getSampleWorlds() {
+                    const baseWorlds = [
+                        { id: 'contemporary', name: 'Contemporary/Modern Day', description: 'Present-day real-world settings that readers recognize', recommendation_score: 85, research_complexity: 'low', commercial_appeal: 'Very High', why_recommended: 'Familiar to readers, easy to write authentically' },
+                        { id: 'small_town', name: 'Small Town/Community', description: 'Tight-knit communities with strong local connections', recommendation_score: 80, research_complexity: 'low', commercial_appeal: 'High', why_recommended: 'Relatable setting with built-in character dynamics' },
+                        { id: 'historical', name: 'Historical Setting', description: 'Well-documented historical periods with established atmosphere', recommendation_score: 75, research_complexity: 'medium', commercial_appeal: 'High', why_recommended: 'Rich atmosphere and proven reader interest' }
+                    ];
+                    if (this.selectedGenre === 'fantasy') {
+                        baseWorlds.push({ id: 'secondary_fantasy', name: 'Secondary Fantasy World', description: 'Original fantasy realm with magic systems and unique cultures', recommendation_score: 90, research_complexity: 'medium', commercial_appeal: 'Excellent', why_recommended: 'High demand in fantasy market with creative freedom' });
+                        baseWorlds.push({ id: 'urban_fantasy', name: 'Urban Fantasy', description: 'Modern world with hidden magical elements', recommendation_score: 88, research_complexity: 'low', commercial_appeal: 'Very High', why_recommended: 'Combines familiar settings with exciting magical elements' });
+                    }
+                    return baseWorlds;
+                },
+                getWorldCardClass(world) {
+                    let baseClass = 'p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ';
+                    if (this.selectedWorld === world.id) baseClass += 'border-blue-500 bg-blue-50 shadow-md ';
+                    else if (this.hoveredOption === world.id) baseClass += 'border-gray-300 bg-gray-50 shadow-sm ';
+                    else baseClass += 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 ';
+                    return baseClass;
+                },
+                getRecommendationBadgeClass(score) {
+                    if (score >= 90) return 'bg-green-100 text-green-800';
+                    if (score >= 80) return 'bg-blue-100 text-blue-800';
+                    if (score >= 70) return 'bg-yellow-100 text-yellow-800';
+                    return 'bg-gray-100 text-gray-800';
+                },
+                getComplexityBadgeClass(complexity) {
+                    const classes = { 'low': 'bg-green-100 text-green-800', 'medium': 'bg-yellow-100 text-yellow-800', 'high': 'bg-red-100 text-red-800' };
+                    return classes[complexity] || 'bg-gray-100 text-gray-800';
+                },
+                formatRecommendationScore(score) { return score ? `${Math.round(score)}% Match` : null; },
+                formatResearchComplexity(complexity) {
+                    const complexityMap = { 'low': 'Minimal Research', 'medium': 'Moderate Research', 'high': 'Extensive Research' };
+                    return complexityMap[complexity] || complexity;
+                }
+            };
+        }
+    </script>
 </head>
 
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
@@ -49,581 +255,576 @@
                 <div><strong>Analysis Success:</strong>
                     <span x-text="$store.wizard.conceptAnalysis?.analysis_successful ? 'Yes' : 'No'"></span>
                 </div>
-                <div><strong>Recommendations:</strong>
-                    <span x-text="$store.wizard.getGenreRecommendations()?.length || 0"></span>
-                </div>
-                <div><strong>Current Step Data:</strong>
-                    <span x-text="$store.wizard.currentStepData?.options?.length || 0"></span> options
-                </div>
+                <div><strong>Form Data:</strong></div>
+                <template x-for="(value, key) in $store.wizard.formData" :key="key">
+                    <div><strong x-text="key"></strong>: <span x-text="value || 'empty'"></span></div>
+                </template>
             </div>
         </div>
     </div>
 
-    <!-- Main Wizard Container -->
-    <div x-data="wizardStore" x-init="initWizard()" class="container mx-auto px-4 py-8">
+    <div x-data="wizardStore" x-init="initWizard()">
         <!-- Header -->
-        <header class="text-center mb-8">
-            <h1 class="text-4xl font-bold text-gray-800 mb-2">Musequill</h1>
-            <p class="text-lg text-gray-600">Create Your Book with AI Guidance</p>
+        <header class="bg-white shadow-sm border-b border-gray-200">
+            <div class="max-w-4xl mx-auto px-6 py-4">
+                <h1 class="text-2xl font-bold text-gray-800">📚 Musequill Book Creation Wizard</h1>
+                <p class="text-gray-600 mt-1">Create your perfect book blueprint in 9 simple steps</p>
+            </div>
         </header>
 
-        <!-- Progress Bar Component -->
-        <div x-data="progressBar" class="mb-8">
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-semibold text-gray-800">Step <span
-                            x-text="$store.wizard.currentStep"></span> of <span
-                            x-text="$store.wizard.totalSteps"></span></h2>
-                    <div class="text-sm text-gray-500">
-                        <span x-text="Math.round(($store.wizard.currentStep / $store.wizard.totalSteps) * 100)"></span>%
-                        Complete
-                    </div>
+        <!-- Progress Bar -->
+        <div x-data="progressBar" class="bg-white border-b border-gray-200">
+            <div class="max-w-4xl mx-auto px-6 py-4">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm font-medium text-gray-700">
+                        Step <span x-text="$store.wizard.currentStep"></span> of
+                        <span x-text="$store.wizard.totalSteps"></span>
+                    </span>
+                    <span class="text-sm text-gray-500"
+                        x-text="Math.round(($store.wizard.currentStep / $store.wizard.totalSteps) * 100) + '%'"></span>
                 </div>
-
-                <!-- Progress Bar -->
-                <div class="w-full bg-gray-200 rounded-full h-3 mb-4">
-                    <div class="bg-gradient-to-r from-blue-500 to-indigo-600 h-3 rounded-full transition-all duration-300"
-                        :style="`width: ${($store.wizard.currentStep / $store.wizard.totalSteps) * 100}%`"></div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-blue-500 h-2 rounded-full transition-all duration-300 ease-out"
+                        :style="'width: ' + Math.round(($store.wizard.currentStep / $store.wizard.totalSteps) * 100) + '%'">
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Main Wizard Content -->
-        <div class="bg-white rounded-lg shadow-lg overflow-hidden">
-            <!-- Step Container -->
-            <div x-data="stepContainer" class="min-h-96">
-                <!-- Loading State -->
-                <div x-show="$store.wizard.isLoading" class="flex items-center justify-center h-96">
-                    <div class="text-center">
-                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                        <p class="text-gray-600">Processing your request...</p>
+        <!-- Main Content -->
+        <main class="max-w-4xl mx-auto">
+            <!-- Error State -->
+            <div x-show="$store.wizard.error" x-transition
+                class="mx-6 mt-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                                clip-rule="evenodd" />
+                        </svg>
                     </div>
-                </div>
-
-                <!-- Error State -->
-                <div x-show="$store.wizard.error" class="p-8 text-center">
-                    <div class="bg-red-50 border border-red-200 rounded-lg p-6">
-                        <h3 class="text-lg font-semibold text-red-800 mb-2">Something went wrong</h3>
-                        <p class="text-red-600 mb-4" x-text="$store.wizard.error"></p>
-                        <button @click="$store.wizard.clearError()"
-                            class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
-                            Try Again
-                        </button>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-red-800">Error</h3>
+                        <div class="mt-2 text-sm text-red-700" x-text="$store.wizard.error"></div>
                     </div>
-                </div>
-
-                <!-- Step Content - Ensure only one step renders at a time -->
-                <div x-show="!$store.wizard.isLoading && !$store.wizard.error">
-                    <!-- Step 1: Book Concept -->
-                    <div x-show="$store.wizard.currentStep === 1" x-data="step1Concept">
-                        <div class="p-8">
-                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Tell us about your book idea</h2>
-                            <p class="text-gray-600 mb-6">Describe your book concept in 2-3 sentences.
-                                This will help us guide you through the creation process.</p>
-
-                            <!-- Show analysis results if available -->
-                            <div x-show="showAnalysis && hasAnalysis"
-                                class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                                <h3 class="font-semibold text-green-800 mb-2">✨ Analysis Complete!</h3>
-                                <p class="text-green-700 text-sm">
-                                    Found <span x-text="genreRecommendations?.length || 0"></span> genre
-                                    recommendations.
-                                    Ready to proceed to genre selection.
-                                </p>
-                            </div>
-
-                            <form @submit.prevent="submitConcept()">
-                                <div class="mb-4">
-                                    <label for="concept" class="block text-sm font-medium text-gray-700 mb-2">
-                                        Book Concept *
-                                    </label>
-                                    <textarea id="concept" x-model="concept" @input="onConceptInput()" rows="4"
-                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                                        placeholder="Example: A young detective in Victorian London discovers that supernatural forces are behind a series of mysterious murders plaguing the city."
-                                        :disabled="isSubmitting">
-                                    </textarea>
-                                    <div class="flex justify-between mt-1">
-                                        <p class="text-sm text-gray-500" x-text="helpText"></p>
-                                        <p class="text-sm text-gray-500" x-text="`${characterCount}/1000 characters`">
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div class="mb-6">
-                                    <label for="additionalNotes" class="block text-sm font-medium text-gray-700 mb-2">
-                                        Additional Notes (Optional)
-                                    </label>
-                                    <textarea id="additionalNotes" x-model="additionalNotes" @input="onNotesInput()"
-                                        rows="2"
-                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                                        placeholder="Any specific themes, content preferences, or additional context..."
-                                        :disabled="isSubmitting">
-                                    </textarea>
-                                </div>
-
-                                <template x-for="error in validationErrors" :key="error">
-                                    <div class="text-red-600 text-sm mb-4" x-text="error"></div>
-                                </template>
-
-                                <div class="flex justify-between items-center">
-                                    <div class="flex space-x-2">
-                                        <button type="button" @click="clearForm()"
-                                            class="text-gray-500 hover:text-gray-700 text-sm">
-                                            Clear Form
-                                        </button>
-                                    </div>
-                                    <button type="submit" :disabled="!isValid || isSubmitting"
-                                        class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                                        <span x-show="!isSubmitting">Start Creating My Book</span>
-                                        <span x-show="isSubmitting">Analyzing Concept...</span>
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-
-                    <!-- Step 2: Genre Selection - COMPLETE IMPLEMENTATION -->
-                    <div x-show="$store.wizard.currentStep === 2" x-data="step2Genre" x-init="init()">
-                        <div class="p-8">
-                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Choose Your Genre</h2>
-                            <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
-
-                            <!-- Debug Info (Remove in production) -->
-                            <div x-show="showAnalysisDetails"
-                                class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                <h3 class="font-semibold text-blue-800 mb-2">🔍 Analysis Details</h3>
-                                <div class="text-sm text-blue-700">
-                                    <div>Original concept: "<span x-text="userConcept"></span>"</div>
-                                    <div>Analysis successful: <span x-text="hasConceptAnalysis ? 'Yes' : 'No'"></span>
-                                    </div>
-                                    <div>Recommendations found: <span x-text="genreRecommendations?.length || 0"></span>
-                                    </div>
-                                </div>
-                                <button @click="toggleAnalysisDetails()"
-                                    class="mt-2 text-xs text-blue-600 hover:text-blue-800">
-                                    Hide Details
-                                </button>
-                            </div>
-
-                            <!-- Genre Options - Using enhancedOptions from component -->
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                <!-- Show enhanced options if available -->
-                                <template x-for="option in enhancedOptions" :key="option.id"
-                                    x-show="enhancedOptions && enhancedOptions.length > 0">
-                                    <div class="border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md relative"
-                                        :class="getOptionClasses(option.id)" @click="selectGenre(option.id)"
-                                        @mouseenter="onOptionHover(option.id)" @mouseleave="onOptionLeave()">
-
-                                        <!-- AI Recommended Badge -->
-                                        <div x-show="getRecommendationBadge(option)" class="absolute top-2 right-2">
-                                            <span
-                                                class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
-                                                :class="getRecommendationBadge(option)?.classes || ''">
-                                                <span x-text="getRecommendationBadge(option)?.text || ''"></span>
-                                            </span>
-                                        </div>
-
-                                        <div class="flex items-start justify-between">
-                                            <div class="flex-1 pr-4">
-                                                <h3 class="font-semibold text-gray-800" x-text="option.name"></h3>
-                                                <p class="text-sm text-gray-600 mt-1" x-text="option.description"></p>
-
-                                                <!-- Market Appeal Badge -->
-                                                <div x-show="option.market_appeal" class="mt-2">
-                                                    <span
-                                                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                                                        :class="getMarketAppealBadgeClasses(option.market_appeal)"
-                                                        x-text="`${option.market_appeal} Market Appeal`">
-                                                    </span>
-                                                </div>
-
-                                                <!-- LLM Reasoning (for AI recommendations) -->
-                                                <div x-show="option.reasoning && option.source === 'llm_analysis'"
-                                                    class="mt-2 text-xs text-gray-500 italic">
-                                                    "<span x-text="option.reasoning"></span>"
-                                                </div>
-                                            </div>
-
-                                            <!-- Recommendation Score -->
-                                            <div x-show="option.recommendation_score" class="text-right">
-                                                <div class="text-sm font-medium text-blue-600"
-                                                    x-text="formatRecommendationScore(option.recommendation_score)">
-                                                </div>
-                                                <div x-show="option.confidence" class="text-xs text-gray-500">
-                                                    Confidence: <span
-                                                        x-text="Math.round((option.confidence || 0) * 100)"></span>%
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </template>
-
-                                <!-- Fallback message if no options -->
-                                <div x-show="!enhancedOptions || enhancedOptions.length === 0"
-                                    class="col-span-full text-center py-8">
-                                    <div class="animate-pulse">
-                                        <div class="rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                                        <p class="text-gray-500">Loading genre recommendations...</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Show Analysis Details Toggle -->
-                            <div x-show="hasConceptAnalysis && !showAnalysisDetails" class="mb-4">
-                                <button @click="toggleAnalysisDetails()"
-                                    class="text-sm text-blue-600 hover:text-blue-800">
-                                    🔍 Show Analysis Details
-                                </button>
-                            </div>
-
-                            <!-- Debug Button (Remove in production) -->
-                            <div class="mt-4 text-center">
-                                <button @click="logAnalysisData()" class="text-xs text-gray-500 hover:text-gray-700">
-                                    Debug: Log Analysis Data
-                                </button>
-                            </div>
-
-                            <!-- Subgenres (if shown) -->
-                            <div x-show="showSubgenres" class="mt-8">
-                                <h3 class="text-lg font-semibold text-gray-800 mb-4">Select a Subgenre</h3>
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <template x-for="subgenre in subgenreOptions" :key="subgenre.id">
-                                        <div class="border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md"
-                                            :class="getOptionClasses(subgenre.id)" @click="selectSubgenre(subgenre.id)">
-                                            <h4 class="font-medium text-gray-800" x-text="subgenre.name"></h4>
-                                            <p class="text-sm text-gray-600 mt-1" x-text="subgenre.description"></p>
-                                        </div>
-                                    </template>
-                                </div>
-                            </div>
-
-                            <!-- Loading State -->
-                            <div x-show="isSubmitting" class="text-center py-4">
-                                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2">
-                                </div>
-                                <p class="text-gray-600">Processing your selection...</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Step 3: Target Audience - COMPLETE IMPLEMENTATION -->
-                    <div x-show="$store.wizard.currentStep === 3" x-data="step3Audience" x-init="init()">
-                        <div class="p-8">
-                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Select Your Target Audience</h2>
-                            <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
-
-                            <!-- Debug Info (Remove in production) -->
-                            <div x-show="showAnalysisDetails"
-                                class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                <h3 class="font-semibold text-blue-800 mb-2">🔍 Analysis Details</h3>
-                                <div class="text-sm text-blue-700">
-                                    <div>Selected genre: "<span x-text="selectedGenre"></span>"</div>
-                                    <div>Selected subgenre: "<span x-text="selectedSubgenre"></span>"</div>
-                                    <div>Analysis successful: <span x-text="hasConceptAnalysis ? 'Yes' : 'No'"></span>
-                                    </div>
-                                    <div>Options available: <span x-text="enhancedOptions?.length || 0"></span></div>
-                                </div>
-                                <button @click="toggleAnalysisDetails()"
-                                    class="mt-2 text-xs text-blue-600 hover:text-blue-800">
-                                    Hide Details
-                                </button>
-                            </div>
-
-                            <!-- Audience Options - Using enhancedOptions from component -->
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                <!-- Show enhanced options if available -->
-                                <template x-for="option in enhancedOptions" :key="option.id"
-                                    x-show="enhancedOptions && enhancedOptions.length > 0">
-                                    <div class="border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md relative"
-                                        :class="getOptionClasses(option.id)" @click="selectAudience(option.id)"
-                                        @mouseenter="onOptionHover(option.id)" @mouseleave="onOptionLeave()">
-
-                                        <!-- Compatibility Badge -->
-                                        <div x-show="getCompatibilityBadge(option.id)" class="absolute top-2 right-2">
-                                            <span
-                                                class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
-                                                :class="getCompatibilityBadge(option.id)?.classes || ''">
-                                                <span x-text="getCompatibilityBadge(option.id)?.text || ''"></span>
-                                            </span>
-                                        </div>
-
-                                        <div class="flex items-start justify-between">
-                                            <div class="flex-1 pr-4">
-                                                <h3 class="font-semibold text-gray-800" x-text="option.name"></h3>
-                                                <p class="text-sm text-gray-600 mt-1" x-text="option.description"></p>
-
-                                                <!-- Age Range -->
-                                                <div x-show="option.age_range" class="mt-2">
-                                                    <span
-                                                        class="inline-flex items-center px-2 py-1 rounded bg-gray-100 text-gray-700 text-xs">
-                                                        Ages: <span x-text="option.age_range"></span>
-                                                    </span>
-                                                </div>
-
-                                                <!-- Market Size Badge -->
-                                                <div x-show="option.market_size" class="mt-2">
-                                                    <span
-                                                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                                                        :class="getMarketSizeBadgeClasses(option.market_size)"
-                                                        x-text="`${option.market_size} Market`">
-                                                    </span>
-                                                </div>
-
-                                                <!-- Characteristics -->
-                                                <div x-show="option.characteristics && option.characteristics.length > 0"
-                                                    class="mt-2">
-                                                    <div class="flex flex-wrap gap-1">
-                                                        <template
-                                                            x-for="characteristic in (option.characteristics || []).slice(0, 3)"
-                                                            :key="characteristic">
-                                                            <span
-                                                                class="inline-flex items-center px-2 py-1 rounded text-xs bg-blue-50 text-blue-700">
-                                                                <span x-text="characteristic"></span>
-                                                            </span>
-                                                        </template>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <!-- Recommendation Score -->
-                                            <div x-show="option.recommendation_score" class="text-right">
-                                                <div class="text-sm font-medium text-blue-600"
-                                                    x-text="formatRecommendationScore(option.recommendation_score)">
-                                                </div>
-                                                <div x-show="option.source" class="text-xs text-gray-500 mt-1">
-                                                    <span
-                                                        x-text="option.source === 'api_data' ? 'AI Recommended' : 'Enhanced'"></span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </template>
-
-                                <!-- Fallback message if no options -->
-                                <div x-show="!enhancedOptions || enhancedOptions.length === 0"
-                                    class="col-span-full text-center py-8">
-                                    <div class="animate-pulse">
-                                        <div class="rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                                        <p class="text-gray-500">Loading audience options...</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Show Analysis Details Toggle -->
-                            <div x-show="hasConceptAnalysis && !showAnalysisDetails" class="mb-4">
-                                <button @click="toggleAnalysisDetails()"
-                                    class="text-sm text-blue-600 hover:text-blue-800">
-                                    🔍 Show Analysis Details
-                                </button>
-                            </div>
-
-                            <!-- Debug Button (Remove in production) -->
-                            <div class="mt-4 text-center">
-                                <button @click="logNavigationState()" class="text-xs text-gray-500 hover:text-gray-700">
-                                    Debug: Log Navigation State
-                                </button>
-                            </div>
-
-                            <!-- Loading State -->
-                            <div x-show="isSubmitting" class="text-center py-4">
-                                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2">
-                                </div>
-                                <p class="text-gray-600">Processing your selection...</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Step 4: Writing Style - COMPLETE IMPLEMENTATION -->
-                    <div x-show="$store.wizard.currentStep === 4" x-data="step4Style" x-init="init()">
-                        <div class="p-8">
-                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Select Your Writing Style</h2>
-                            <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
-
-                            <!-- Debug Info (Remove in production) -->
-                            <div x-show="showAnalysisDetails"
-                                class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                <h3 class="font-semibold text-blue-800 mb-2">🔍 Analysis Details</h3>
-                                <div class="text-sm text-blue-700">
-                                    <div>Selected genre: "<span x-text="selectedGenre"></span>"</div>
-                                    <div>Selected audience: "<span x-text="selectedAudience"></span>"</div>
-                                    <div>Analysis successful: <span x-text="hasConceptAnalysis ? 'Yes' : 'No'"></span>
-                                    </div>
-                                    <div>Options available: <span x-text="enhancedOptions?.length || 0"></span></div>
-                                </div>
-                                <button @click="toggleAnalysisDetails()"
-                                    class="mt-2 text-xs text-blue-600 hover:text-blue-800">
-                                    Hide Details
-                                </button>
-                            </div>
-
-                            <!-- Writing Style Options - Using enhancedOptions from component -->
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                                <!-- Show enhanced options if available -->
-                                <template x-for="option in enhancedOptions" :key="option.id"
-                                    x-show="enhancedOptions && enhancedOptions.length > 0">
-                                    <div class="border rounded-lg p-6 cursor-pointer transition-all duration-200 hover:shadow-md relative"
-                                        :class="getOptionClasses(option.id)" @click="selectStyle(option.id)"
-                                        @mouseenter="onOptionHover(option.id)" @mouseleave="onOptionLeave()">
-
-                                        <!-- Compatibility Badge -->
-                                        <div x-show="getCompatibilityBadge(option.id)" class="absolute top-2 right-2">
-                                            <span
-                                                class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
-                                                :class="getCompatibilityBadge(option.id)?.classes || ''">
-                                                <span x-text="getCompatibilityBadge(option.id)?.text || ''"></span>
-                                            </span>
-                                        </div>
-
-                                        <div class="flex flex-col h-full">
-                                            <!-- Style Header -->
-                                            <div class="flex-1">
-                                                <h3 class="font-semibold text-gray-800 text-lg mb-2"
-                                                    x-text="option.name"></h3>
-                                                <p class="text-sm text-gray-600 mb-3" x-text="option.description"></p>
-
-                                                <!-- Complexity Badge -->
-                                                <div x-show="option.complexity" class="mb-3">
-                                                    <span
-                                                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                                                        :class="getComplexityBadgeClasses(option.complexity)"
-                                                        x-text="option.complexity">
-                                                    </span>
-                                                </div>
-
-                                                <!-- Characteristics -->
-                                                <div x-show="option.characteristics && option.characteristics.length > 0"
-                                                    class="mb-3">
-                                                    <div class="flex flex-wrap gap-1">
-                                                        <template
-                                                            x-for="characteristic in (option.characteristics || [])"
-                                                            :key="characteristic">
-                                                            <span
-                                                                class="inline-flex items-center px-2 py-1 rounded text-xs bg-blue-50 text-blue-700">
-                                                                <span x-text="characteristic"></span>
-                                                            </span>
-                                                        </template>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Example (if available) -->
-                                                <div x-show="option.example"
-                                                    class="mb-3 p-3 bg-gray-50 rounded italic text-sm">
-                                                    <strong>Example:</strong> <span x-text="option.example"></span>
-                                                </div>
-                                            </div>
-
-                                            <!-- Footer with Score -->
-                                            <div
-                                                class="flex justify-between items-center mt-auto pt-3 border-t border-gray-100">
-                                                <div x-show="option.market_appeal" class="text-xs text-gray-500">
-                                                    Market Appeal: <span x-text="option.market_appeal"></span>
-                                                </div>
-                                                <div x-show="option.recommendation_score" class="text-right">
-                                                    <div class="text-sm font-medium text-blue-600"
-                                                        x-text="formatRecommendationScore(option.recommendation_score)">
-                                                    </div>
-                                                    <div x-show="option.source" class="text-xs text-gray-500 mt-1">
-                                                        <span
-                                                            x-text="option.source === 'api_data' ? 'AI Recommended' : 'Enhanced'"></span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </template>
-
-                                <!-- Fallback message if no options -->
-                                <div x-show="!enhancedOptions || enhancedOptions.length === 0"
-                                    class="col-span-full text-center py-8">
-                                    <div class="animate-pulse">
-                                        <div class="rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                                        <p class="text-gray-500">Loading writing style options...</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Show Analysis Details Toggle -->
-                            <div x-show="hasConceptAnalysis && !showAnalysisDetails" class="mb-4">
-                                <button @click="toggleAnalysisDetails()"
-                                    class="text-sm text-blue-600 hover:text-blue-800">
-                                    🔍 Show Analysis Details
-                                </button>
-                            </div>
-
-                            <!-- Debug Button (Remove in production) -->
-                            <div class="mt-4 text-center">
-                                <button @click="logNavigationState()" class="text-xs text-gray-500 hover:text-gray-700">
-                                    Debug: Log Navigation State
-                                </button>
-                            </div>
-
-                            <!-- Loading State -->
-                            <div x-show="isSubmitting" class="text-center py-4">
-                                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2">
-                                </div>
-                                <p class="text-gray-600">Processing your selection...</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Steps 5-9: Placeholder templates for future implementation -->
-                    <template x-for="stepNum in [5, 6, 7, 8, 9]" :key="stepNum">
-                        <div x-show="$store.wizard.currentStep === stepNum" x-data="`step${stepNum}Data`">
-                            <div class="p-8">
-                                <h2 class="text-2xl font-bold text-gray-800 mb-4" x-text="stepTitle"></h2>
-                                <p class="text-gray-600 mb-6" x-text="stepDescription"></p>
-
-                                <!-- Dynamic step content will be loaded here -->
-                                <div class="text-center py-8">
-                                    <div class="animate-pulse">
-                                        <p class="text-gray-500">Loading step content...</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </template>
                 </div>
             </div>
 
-            <!-- Navigation -->
-            <div x-data="navigation" class="bg-gray-50 px-8 py-4 border-t">
-                <div class="flex justify-between items-center">
-                    <button @click="goBack()" x-show="$store.wizard.currentStep > 1"
-                        class="flex items-center px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7">
-                            </path>
-                        </svg>
-                        Back
-                    </button>
+            <!-- Step Container -->
+            <div class="bg-white shadow-lg rounded-lg mx-6 my-6">
+                <!-- Step 1: Book Concept -->
+                <div x-show="$store.wizard.currentStep === 1" x-data="step1Concept" x-init="init()">
+                    <div class="p-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Tell us about your book idea</h2>
+                        <p class="text-gray-600 mb-6">Describe your book concept in 2-3 sentences. This will help us
+                            guide you through the creation process.</p>
 
-                    <div class="text-sm text-gray-500">
-                        Step <span x-text="$store.wizard.currentStep"></span> of <span
-                            x-text="$store.wizard.totalSteps"></span>
+                        <!-- Debug info for step 1 -->
+                        <div class="mb-4 p-2 bg-gray-100 rounded text-xs">
+                            <div>Step 1 Debug: concept=<span x-text="concept?.substring(0, 30) + '...'"></span></div>
+                            <div>isValid=<span x-text="isValid"></span>, isSubmitting=<span
+                                    x-text="isSubmitting"></span></div>
+                        </div>
+
+                        <form @submit.prevent="submitConcept()">
+                            <div class="mb-6">
+                                <label for="concept" class="block text-sm font-medium text-gray-700 mb-2">
+                                    Your Book Concept *
+                                </label>
+                                <textarea id="concept" x-model="concept"
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                    rows="4"
+                                    placeholder="Example: A young detective discovers that every crime in her city is connected to an ancient magical artifact that's been influencing people's decisions for centuries."
+                                    :disabled="isSubmitting"></textarea>
+                                <div class="flex justify-between items-center mt-2">
+                                    <span class="text-sm"
+                                        :class="concept.length < 10 ? 'text-red-500' : concept.length > 1000 ? 'text-red-500' : 'text-gray-500'"
+                                        x-text="concept.length + ' characters'"></span>
+                                    <span class="text-sm text-gray-500">10-1000 characters</span>
+                                </div>
+                            </div>
+
+                            <div class="mb-6">
+                                <label for="additionalNotes" class="block text-sm font-medium text-gray-700 mb-2">
+                                    Additional Notes (Optional)
+                                </label>
+                                <textarea id="additionalNotes" x-model="additionalNotes"
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                    rows="2" placeholder="Any specific themes, tone, or elements you want to include..."
+                                    :disabled="isSubmitting"></textarea>
+                            </div>
+
+                            <div class="flex justify-end">
+                                <button type="submit" :disabled="!isValid || isSubmitting"
+                                    class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
+                                    <span x-show="!isSubmitting">Start Creating My Book</span>
+                                    <span x-show="isSubmitting">Analyzing Concept...</span>
+                                </button>
+                            </div>
+                        </form>
                     </div>
-
-                    <button @click="goNext()"
-                        x-show="$store.wizard.currentStep < $store.wizard.totalSteps && $store.wizard.canProceed()"
-                        class="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
-                        Next
-                        <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7">
-                            </path>
-                        </svg>
-                    </button>
                 </div>
+
+                <!-- Step 2: Genre Selection -->
+                <div x-show="$store.wizard.currentStep === 2" x-data="step2Genre" x-init="init()">
+                    <div class="p-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Choose Your Genre</h2>
+                        <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
+
+                        <!-- Genre Options -->
+                        <div class="space-y-4">
+                            <template x-for="option in enhancedOptions" :key="option.id">
+                                <div @click="selectGenre(option.id)" :class="getOptionClasses(option.id)"
+                                    class="cursor-pointer transition-all duration-200">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex-1">
+                                            <h3 class="text-lg font-semibold text-gray-800" x-text="option.name"></h3>
+                                            <p class="text-gray-600 mt-1" x-text="option.description"></p>
+                                            <div class="flex items-center mt-2 space-x-4">
+                                                <span x-show="option.recommendation_score"
+                                                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                                                    x-text="formatRecommendationScore(option.recommendation_score)"></span>
+                                                <span x-show="option.market_appeal" class="text-sm text-blue-600"
+                                                    x-text="'Market: ' + option.market_appeal"></span>
+                                            </div>
+                                        </div>
+                                        <div x-show="selectedGenre === option.id"
+                                            class="ml-4 text-blue-500 flex-shrink-0">
+                                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd"
+                                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                                    clip-rule="evenodd"></path>
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Continue Button -->
+                        <div x-show="canProceed" x-transition class="mt-8 flex justify-end">
+                            <button @click="processGenreSelection()" :disabled="isSubmitting"
+                                class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
+                                <span x-show="!isSubmitting">Continue to Audience</span>
+                                <span x-show="isSubmitting">Processing...</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Audience Selection -->
+                <div x-show="$store.wizard.currentStep === 3" x-data="step3Audience" x-init="init()">
+                    <div class="p-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Target Audience</h2>
+                        <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
+
+                        <!-- Audience Options -->
+                        <div class="space-y-4">
+                            <template x-for="option in options" :key="option.id">
+                                <div @click="selectAudience(option.id)" :class="getOptionClasses(option.id)"
+                                    class="cursor-pointer transition-all duration-200">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex-1">
+                                            <h3 class="text-lg font-semibold text-gray-800" x-text="option.name"></h3>
+                                            <p class="text-gray-600 mt-1" x-text="option.description"></p>
+                                            <div class="flex items-center mt-2 space-x-4">
+                                                <span x-show="option.recommendation_score"
+                                                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                                                    x-text="formatRecommendationScore(option.recommendation_score)"></span>
+                                                <span x-show="option.market_size" class="text-sm text-blue-600"
+                                                    x-text="'Market: ' + option.market_size"></span>
+                                            </div>
+                                        </div>
+                                        <div x-show="selectedAudience === option.id"
+                                            class="ml-4 text-blue-500 flex-shrink-0">
+                                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd"
+                                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                                    clip-rule="evenodd"></path>
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Continue Button -->
+                        <div x-show="canProceed" x-transition class="mt-8 flex justify-end">
+                            <button @click="processAudienceSelection()" :disabled="isSubmitting"
+                                class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
+                                <span x-show="!isSubmitting">Continue to Writing Style</span>
+                                <span x-show="isSubmitting">Processing...</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4: Writing Style -->
+                <div x-show="$store.wizard.currentStep === 4" x-data="step4Style" x-init="init()">
+                    <div class="p-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Choose Your Writing Style</h2>
+                        <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
+
+                        <!-- Style Options -->
+                        <div class="space-y-4">
+                            <template x-for="option in options" :key="option.id">
+                                <div @click="selectStyle(option.id)" :class="getOptionClasses(option.id)"
+                                    class="cursor-pointer transition-all duration-200">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex-1">
+                                            <h3 class="text-lg font-semibold text-gray-800" x-text="option.name"></h3>
+                                            <p class="text-gray-600 mt-1" x-text="option.description"></p>
+                                            <div class="flex items-center mt-2 space-x-4">
+                                                <span x-show="option.recommendation_score"
+                                                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                                                    x-text="formatRecommendationScore(option.recommendation_score)"></span>
+                                                <span x-show="option.genre_compatibility" class="text-sm text-blue-600"
+                                                    x-text="'Compatibility: ' + option.genre_compatibility"></span>
+                                            </div>
+                                        </div>
+                                        <div x-show="selectedStyle === option.id"
+                                            class="ml-4 text-blue-500 flex-shrink-0">
+                                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd"
+                                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                                    clip-rule="evenodd"></path>
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Continue Button -->
+                        <div x-show="canProceed" x-transition class="mt-8 flex justify-end">
+                            <button @click="processStyleSelection()" :disabled="isSubmitting"
+                                class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
+                                <span x-show="!isSubmitting">Continue to Book Length</span>
+                                <span x-show="isSubmitting">Processing...</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 5: Book Length -->
+                <div x-show="$store.wizard.currentStep === 5" x-data="step5Length"
+                    x-init="init(); $watch('$store.wizard.currentStep', (newStep) => { if(newStep === 5) onStepVisible(); })">
+                    <div class="p-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Choose Your Book Length</h2>
+                        <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
+
+                        <!-- Debug info for step 5 -->
+                        <div class="mb-4 p-2 bg-gray-100 rounded text-xs">
+                            <div>Step 5 Debug: options=<span x-text="options.length"></span>, sessionId=<span
+                                    x-text="$store.wizard.sessionId ? 'exists' : 'none'"></span></div>
+                            <div>selectedLength=<span x-text="selectedLength"></span>, canProceed=<span
+                                    x-text="canProceed"></span></div>
+                        </div>
+
+                        <!-- Length Options -->
+                        <div class="space-y-4">
+                            <template x-for="option in options" :key="option.id">
+                                <div @click="selectLength(option.id)" :class="getOptionClasses(option.id)"
+                                    class="cursor-pointer transition-all duration-200">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex-1">
+                                            <h3 class="text-lg font-semibold text-gray-800" x-text="option.name"></h3>
+                                            <p class="text-gray-600 mt-1" x-text="option.description"></p>
+
+                                            <!-- Length Details -->
+                                            <div class="mt-3 space-y-2">
+                                                <div class="flex items-center space-x-4 text-sm">
+                                                    <span class="font-medium text-gray-700">Word Count:</span>
+                                                    <span class="text-gray-600" x-text="option.word_count"></span>
+                                                </div>
+                                                <div class="flex items-center space-x-4 text-sm">
+                                                    <span class="font-medium text-gray-700">Time to Write:</span>
+                                                    <span x-text="option.time_to_write"
+                                                        :class="getTimeBadgeClasses(option.time_to_write)"></span>
+                                                </div>
+                                                <div class="flex items-center space-x-4 text-sm">
+                                                    <span class="font-medium text-gray-700">Publishing Viability:</span>
+                                                    <span x-text="option.publishing_viability"
+                                                        :class="getViabilityBadgeClasses(option.publishing_viability)"></span>
+                                                </div>
+                                            </div>
+
+                                            <div class="flex items-center mt-2 space-x-4">
+                                                <span x-show="option.recommendation_score"
+                                                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                                                    x-text="formatRecommendationScore(option.recommendation_score)"></span>
+                                                <span x-show="option.market_appeal" class="text-sm text-blue-600"
+                                                    x-text="'Market: ' + option.market_appeal"></span>
+                                            </div>
+                                        </div>
+                                        <div x-show="selectedLength === option.id"
+                                            class="ml-4 text-blue-500 flex-shrink-0">
+                                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd"
+                                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                                    clip-rule="evenodd"></path>
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Continue Button -->
+                        <div x-show="canProceed" x-transition class="mt-8 flex justify-end">
+                            <button @click="processLengthSelection()" :disabled="isSubmitting"
+                                class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
+                                <span x-show="!isSubmitting">Continue to Story Structure</span>
+                                <span x-show="isSubmitting">Processing...</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 6: Story Structure -->
+                <div x-show="$store.wizard.currentStep === 6" x-data="step6Structure"
+                    x-init="init(); $watch('$store.wizard.currentStep', (newStep) => { if(newStep === 6) onStepVisible(); })">
+                    <div class="p-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Choose Your Story Structure</h2>
+                        <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
+
+                        <!-- Debug info for step 6 -->
+                        <div class="mb-4 p-2 bg-gray-100 rounded text-xs">
+                            <div>Step 6 Debug: options=<span x-text="options.length"></span>, sessionId=<span
+                                    x-text="$store.wizard.sessionId ? 'exists' : 'none'"></span></div>
+                            <div>selectedStructure=<span x-text="selectedStructure"></span>, canProceed=<span
+                                    x-text="canProceed"></span></div>
+                        </div>
+
+                        <!-- Structure Options -->
+                        <div class="space-y-4">
+                            <template x-for="option in options" :key="option.id">
+                                <div @click="selectStructure(option.id)" :class="getStructureCardClass(option)"
+                                    @mouseenter="hoveredOption = option.id" @mouseleave="hoveredOption = null">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex-1">
+                                            <h3 class="text-lg font-semibold text-gray-800" x-text="option.name"></h3>
+                                            <p class="text-gray-600 mt-1" x-text="option.description"></p>
+
+                                            <!-- Structure Details -->
+                                            <div class="flex items-center mt-3 space-x-4">
+                                                <span x-show="option.recommendation_score"
+                                                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                                    :class="getRecommendationBadgeClass(option.recommendation_score)"
+                                                    x-text="formatRecommendationScore(option.recommendation_score)"></span>
+                                                <span x-show="option.difficulty"
+                                                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                                    :class="getDifficultyBadgeClass(option.difficulty)"
+                                                    x-text="formatDifficulty(option.difficulty)"></span>
+                                                <span x-show="option.commercial_appeal" class="text-sm text-blue-600"
+                                                    x-text="'Appeal: ' + option.commercial_appeal"></span>
+                                            </div>
+
+                                            <div x-show="option.why_recommended" class="mt-2">
+                                                <p class="text-sm text-gray-500" x-text="option.why_recommended"></p>
+                                            </div>
+                                        </div>
+                                        <div x-show="selectedStructure === option.id"
+                                            class="ml-4 text-blue-500 flex-shrink-0">
+                                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd"
+                                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                                    clip-rule="evenodd"></path>
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Continue Button -->
+                        <div x-show="canProceed" x-transition class="mt-8 flex justify-end">
+                            <button @click="processStructureSelection()" :disabled="isSubmitting"
+                                class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
+                                <span x-show="!isSubmitting">Continue to World Building</span>
+                                <span x-show="isSubmitting">Processing...</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 7: World Building -->
+                <div x-show="$store.wizard.currentStep === 7" x-data="step7World"
+                    x-init="init(); $watch('$store.wizard.currentStep', (newStep) => { if(newStep === 7) onStepVisible(); })">
+                    <div class="p-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">World Building</h2>
+                        <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
+
+                        <!-- Debug info for step 7 -->
+                        <div class="mb-4 p-2 bg-gray-100 rounded text-xs">
+                            <div>Step 7 Debug: options=<span x-text="options.length"></span>, sessionId=<span
+                                    x-text="$store.wizard.sessionId ? 'exists' : 'none'"></span></div>
+                            <div>selectedWorld=<span x-text="selectedWorld"></span>, canProceed=<span
+                                    x-text="canProceed"></span></div>
+                        </div>
+
+                        <!-- World Options -->
+                        <div class="space-y-4">
+                            <template x-for="option in options" :key="option.id">
+                                <div @click="selectWorld(option.id)" :class="getWorldCardClass(option)"
+                                    @mouseenter="hoveredOption = option.id" @mouseleave="hoveredOption = null">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex-1">
+                                            <h3 class="text-lg font-semibold text-gray-800" x-text="option.name"></h3>
+                                            <p class="text-gray-600 mt-1" x-text="option.description"></p>
+
+                                            <!-- World Details -->
+                                            <div class="flex items-center mt-3 space-x-4">
+                                                <span x-show="option.recommendation_score"
+                                                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                                    :class="getRecommendationBadgeClass(option.recommendation_score)"
+                                                    x-text="formatRecommendationScore(option.recommendation_score)"></span>
+                                                <span x-show="option.research_complexity"
+                                                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                                    :class="getComplexityBadgeClass(option.research_complexity)"
+                                                    x-text="formatResearchComplexity(option.research_complexity)"></span>
+                                                <span x-show="option.commercial_appeal" class="text-sm text-blue-600"
+                                                    x-text="'Appeal: ' + option.commercial_appeal"></span>
+                                            </div>
+
+                                            <div x-show="option.why_recommended" class="mt-2">
+                                                <p class="text-sm text-gray-500" x-text="option.why_recommended"></p>
+                                            </div>
+                                        </div>
+                                        <div x-show="selectedWorld === option.id"
+                                            class="ml-4 text-blue-500 flex-shrink-0">
+                                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd"
+                                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                                    clip-rule="evenodd"></path>
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Continue Button -->
+                        <div x-show="canProceed" x-transition class="mt-8 flex justify-end">
+                            <button @click="processWorldSelection()" :disabled="isSubmitting"
+                                class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
+                                <span x-show="!isSubmitting">Continue to Content Preferences</span>
+                                <span x-show="isSubmitting">Processing...</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 8: Content Preferences -->
+                <div x-show="$store.wizard.currentStep === 8" x-data="{ 
+                    llmMessage: 'Specify any content preferences or restrictions.',
+                    init() {
+                        console.log('Step 8 placeholder init - no API calls');
+                    }
+                }">
+                    <div class="p-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Content Preferences</h2>
+                        <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
+
+                        <!-- Debug info for step 8 -->
+                        <div class="mb-4 p-2 bg-gray-100 rounded text-xs">
+                            <div>Step 8 Debug: Placeholder implementation</div>
+                            <div>sessionId=<span x-text="$store.wizard.sessionId ? 'exists' : 'none'"></span></div>
+                        </div>
+
+                        <!-- Placeholder content -->
+                        <div class="text-center py-8">
+                            <div class="animate-pulse">
+                                <p class="text-gray-500">Step 8 (Content Preferences) - Under Construction</p>
+                                <p class="text-sm text-gray-400 mt-2">This step will be implemented soon.</p>
+                            </div>
+                        </div>
+
+                        <!-- Temporary continue button -->
+                        <div class="mt-8 flex justify-end">
+                            <button @click="$store.wizard.setCurrentStep(9)"
+                                class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                                Continue to Summary
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 9: Final Summary -->
+                <div x-show="$store.wizard.currentStep === 9" x-data="{ 
+                    llmMessage: 'Review your book blueprint and finalize your creation.',
+                    init() {
+                        console.log('Step 9 placeholder init - no API calls');
+                    }
+                }">
+                    <div class="p-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Final Summary</h2>
+                        <p class="text-gray-600 mb-6" x-text="llmMessage"></p>
+
+                        <!-- Debug info for step 9 -->
+                        <div class="mb-4 p-2 bg-gray-100 rounded text-xs">
+                            <div>Step 9 Debug: Placeholder implementation</div>
+                            <div>sessionId=<span x-text="$store.wizard.sessionId ? 'exists' : 'none'"></span></div>
+                        </div>
+
+                        <!-- Show collected data -->
+                        <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <h3 class="font-semibold text-blue-800 mb-2">📋 Your Book Blueprint</h3>
+                            <div class="text-sm text-blue-700 space-y-1">
+                                <div><strong>Concept:</strong> <span
+                                        x-text="$store.wizard.formData.concept?.substring(0, 100) + '...'"></span></div>
+                                <div><strong>Genre:</strong> <span x-text="$store.wizard.formData.genre"></span></div>
+                                <div><strong>Audience:</strong> <span x-text="$store.wizard.formData.audience"></span>
+                                </div>
+                                <div><strong>Style:</strong> <span x-text="$store.wizard.formData.style"></span></div>
+                                <div><strong>Length:</strong> <span x-text="$store.wizard.formData.length"></span></div>
+                                <div><strong>Structure:</strong> <span x-text="$store.wizard.formData.structure"></span>
+                                </div>
+                                <div><strong>World:</strong> <span x-text="$store.wizard.formData.world"></span></div>
+                            </div>
+                        </div>
+
+                        <!-- Placeholder content -->
+                        <div class="text-center py-8">
+                            <div class="animate-pulse">
+                                <p class="text-gray-500">Step 9 (Final Summary) - Under Construction</p>
+                                <p class="text-sm text-gray-400 mt-2">This step will be implemented soon.</p>
+                            </div>
+                        </div>
+
+                        <!-- Completion button -->
+                        <div class="mt-8 flex justify-end">
+                            <button
+                                @click="alert('Book creation completed! Summary: ' + JSON.stringify($store.wizard.formData, null, 2))"
+                                class="px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors">
+                                Complete Book Creation
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Navigation -->
+        <div x-data="navigation" class="bg-gray-50 px-8 py-4 border-t">
+            <div class="flex justify-between items-center max-w-4xl mx-auto">
+                <button
+                    @click="$store.wizard.currentStep > 1 ? $store.wizard.setCurrentStep($store.wizard.currentStep - 1) : null"
+                    :disabled="$store.wizard.currentStep <= 1"
+                    class="px-4 py-2 text-gray-600 hover:text-gray-800 disabled:text-gray-400 disabled:cursor-not-allowed">
+                    ← Back
+                </button>
+
+                <div class="text-sm text-gray-500">
+                    <span x-text="$store.wizard.currentStep"></span> of <span x-text="$store.wizard.totalSteps"></span>
+                </div>
+
+                <!-- Empty div for layout balance -->
+                <div></div>
             </div>
         </div>
     </div>
-
-    <!-- Initialize API Client -->
-    <script>
-        // Initialize API client when page loads
-        document.addEventListener('DOMContentLoaded', function () {
-            window.apiClient = new ApiClient('http://localhost:8000');
-            console.log('API Client initialized');
-        });
-    </script>
 </body>
 
 </html>

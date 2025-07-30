@@ -1,5 +1,5 @@
 /**
- * Step 7: World Building Component
+ * Step 7: World Building Component  
  * Handles world/setting type selection based on genre and story structure
  */
 
@@ -16,117 +16,294 @@ function step7World() {
         // UI state
         hoveredOption: null,
 
-        // Computed
+        // Computed properties with logging
         get hasSelection() {
-            return this.selectedWorld !== '';
+            const result = this.selectedWorld !== '';
+            console.log('✅ Step7World - hasSelection:', result, 'selectedWorld:', this.selectedWorld);
+            return result;
         },
 
         get canProceed() {
-            return this.hasSelection;
+            const result = this.hasSelection;
+            console.log('🚀 Step7World - canProceed:', result);
+            return result;
+        },
+
+        // Access wizard store data with logging
+        get currentStepData() {
+            const data = this.$store.wizard.currentStepData;
+            console.log('📊 Step7World - currentStepData accessed:', data);
+            return data;
+        },
+
+        get selectedGenre() {
+            const genre = this.$store.wizard.formData.genre;
+            console.log('🎭 Step7World - selectedGenre:', genre);
+            return genre;
+        },
+
+        get selectedStructure() {
+            const structure = this.$store.wizard.formData.structure;
+            console.log('🏗️ Step7World - selectedStructure:', structure);
+            return structure;
         },
 
         // Methods
         async selectWorld(worldId) {
+            console.log('🎯 Step7World - selectWorld called with:', worldId);
             this.selectedWorld = worldId;
 
             // Update store
             this.$store.wizard.updateFormData('world', worldId);
+            console.log('📝 Step7World - Updated formData with world:', worldId);
 
             // Process world selection
             await this.processWorldSelection();
         },
 
         async processWorldSelection() {
-            if (!this.selectedWorld) return;
+            console.log('⚡ Step7World - processWorldSelection started');
+            console.log('⚡ Step7World - selectedWorld:', this.selectedWorld);
+
+            if (!this.selectedWorld) {
+                console.log('❌ Step7World - No selectedWorld, aborting');
+                return;
+            }
 
             this.isSubmitting = true;
+            console.log('⚡ Step7World - Set isSubmitting to true');
 
             try {
+                console.log('🌐 Step7World - Calling processStep with:', {
+                    stepNumber: 7,
+                    selection: this.selectedWorld
+                });
+
                 const success = await this.$store.wizard.processStep(
                     7, // Step number
                     this.selectedWorld
                 );
 
+                console.log('🌐 Step7World - processStep result:', success);
+
                 if (success) {
+                    console.log('🔥 Step7World - Processing successful, proceeding to next step');
                     await this.proceedToNextStep();
+                } else {
+                    console.error('❌ Step7World - processStep failed');
                 }
             } catch (error) {
-                console.error('Error processing world selection:', error);
+                console.error('💥 Step7World - Error in processWorldSelection:', error);
             } finally {
                 this.isSubmitting = false;
+                console.log('🔥 Step7World - processWorldSelection finished');
             }
         },
 
         async proceedToNextStep() {
+            console.log('➡️ Step7World - proceedToNextStep called');
+
             // Move to step 8 (content preferences)
             this.$store.wizard.setCurrentStep(8);
+            console.log('➡️ Step7World - Set current step to 8');
 
             // Load step 8 data
             await this.loadContentPreferencesData();
         },
 
         async loadContentPreferencesData() {
+            console.log('🌐 Step7World - loadContentPreferencesData called');
+
             try {
                 const success = await this.$store.wizard.processStep(8, null);
+                console.log('🌐 Step7World - loadContentPreferencesData result:', success);
                 // Step 8 data will be loaded automatically through the store
             } catch (error) {
-                console.error('Error loading content preferences data:', error);
+                console.error('💥 Step7World - Error loading content preferences data:', error);
             }
         },
 
-        // Data loading
+        // Data loading with comprehensive logging
         loadStepData() {
-            const stepData = this.$store.wizard.currentStepData;
+            console.log('📥 Step7World - loadStepData called');
 
-            this.options = stepData.options || [];
-            this.llmMessage = stepData.llmReasoning || this.getDefaultMessage();
+            const stepData = this.$store.wizard.currentStepData;
+            console.log('📥 Step7World - Raw stepData:', stepData);
+
+            // Load options with fallback
+            if (stepData && stepData.options && stepData.options.length > 0) {
+                console.log('📥 Step7World - Using stepData.options:', stepData.options.length, 'options');
+                this.options = stepData.options;
+            } else {
+                console.log('📥 Step7World - No stepData.options, keeping current options or using getSampleWorlds');
+                if (this.options.length === 0) {
+                    this.options = this.getSampleWorlds();
+                }
+            }
+            console.log('📥 Step7World - Final this.options length:', this.options.length);
+
+            // Set LLM message
+            const newMessage = stepData?.llmReasoning || this.getDefaultMessage();
+            console.log('📥 Step7World - Setting llmMessage:', newMessage);
+            this.llmMessage = newMessage;
 
             // Load any existing selection
-            this.selectedWorld = this.$store.wizard.formData.world || '';
+            const existingSelection = this.$store.wizard.formData.world || '';
+            console.log('📥 Step7World - Loading existing selection:', existingSelection);
+            this.selectedWorld = existingSelection;
+
+            console.log('📥 Step7World - loadStepData completed');
         },
 
         getDefaultMessage() {
-            const selectedGenre = this.$store.wizard.formData.genre;
-            return `For your ${selectedGenre || 'chosen genre'} story, these settings offer commercial appeal:`;
+            const selectedGenre = this.selectedGenre;
+            const message = `For your ${selectedGenre || 'chosen genre'} story, these settings offer commercial appeal:`;
+            console.log('💬 Step7World - getDefaultMessage:', message);
+            return message;
         },
 
-        // Navigation
-        goBack() {
-            // Go back to step 6 (story structure)
-            this.$store.wizard.setCurrentStep(6);
-        },
-
-        // Lifecycle
+        // Lifecycle with comprehensive logging
         init() {
+            // IMMEDIATE early return if not on step 7 - don't even log
+            if (this.$store.wizard.currentStep !== 7) {
+                return;
+            }
+
+            console.log('🏁 Step7World - INIT STARTING');
+            console.log('🏁 Step7World - Component initialization...');
+
+            // Log wizard store state
+            console.log('🏪 Step7World - Wizard Store State:');
+            console.log('🏪 Step7World - currentStep:', this.$store.wizard.currentStep);
+            console.log('🏪 Step7World - sessionId:', this.$store.wizard.sessionId);
+            console.log('🏪 Step7World - formData:', this.$store.wizard.formData);
+            console.log('🏪 Step7World - currentStepData:', this.$store.wizard.currentStepData);
+
+            // Initialize with fallback data first to show something
+            this.options = this.getSampleWorlds();
+            this.llmMessage = this.getDefaultMessage();
+            console.log('📦 Step7World - Initialized with fallback data');
+
+            // CRITICAL: Check if we have a valid session before making API calls
+            if (!this.$store.wizard.sessionId) {
+                console.log('❌ Step7World - No session ID, staying with fallback data');
+                console.log('🏁 Step7World - INIT COMPLETED (with fallback data)');
+                return;
+            }
+
+            // Load current step data from wizard store
+            console.log('📥 Step7World - Loading step data from store...');
             this.loadStepData();
 
-            // If we don't have step data, load it
-            if (this.options.length === 0 || !this.options[0].id) {
-                this.loadWorldOptions();
+            // Check if we have step data from previous navigation
+            if (this.currentStepData?.options && this.currentStepData.options.length > 0) {
+                console.log('✅ Step7World - Found existing step data, using it');
+                this.options = this.currentStepData.options;
+                this.llmMessage = this.currentStepData.llmReasoning || this.getDefaultMessage();
+                console.log('🏁 Step7World - INIT COMPLETED (with existing data)');
+                return;
+            }
+
+            // Only make API call if we have session and don't have options and we're on step 7
+            console.log('🌐 Step7World - No step data found, loading from API...');
+            this.loadWorldOptions();
+
+            console.log('🏁 Step7World - INIT COMPLETED');
+        },
+
+        // Add a method to be called when step becomes visible
+        async onStepVisible() {
+            console.log('👁️ Step7World - onStepVisible called');
+
+            if (this.$store.wizard.currentStep !== 7) {
+                console.log('❌ Step7World - Not on step 7, ignoring visibility');
+                return;
+            }
+
+            // Wait a moment for any pending store updates
+            await this.$nextTick();
+
+            // Check if we have fresh data from the previous step
+            console.log('👁️ Step7World - Checking for fresh data...');
+            const freshStepData = this.$store.wizard.currentStepData;
+            console.log('👁️ Step7World - Fresh step data:', freshStepData);
+
+            // If we have step data with options, use it
+            if (freshStepData && freshStepData.options && freshStepData.options.length > 0) {
+                console.log('✅ Step7World - Found fresh step data, updating options');
+                this.options = freshStepData.options;
+                this.llmMessage = freshStepData.llmReasoning || this.getDefaultMessage();
+                return;
+            }
+
+            // Initialize if not already done
+            if (this.options.length === 0) {
+                console.log('🔄 Step7World - No options loaded, initializing...');
+                this.options = this.getSampleWorlds();
+                this.llmMessage = this.getDefaultMessage();
+            } else {
+                console.log('✅ Step7World - Already have options:', this.options.length);
             }
         },
 
         async loadWorldOptions() {
-            // Load options based on current selections
+            console.log('🌐 Step7World - loadWorldOptions called');
+
+            // Final safety checks - MULTIPLE GUARDS
+            if (this.$store.wizard.currentStep !== 7) {
+                console.log('❌ Step7World - Not on Step 7, aborting API call. Current step:', this.$store.wizard.currentStep);
+                return;
+            }
+
+            if (!this.$store.wizard.sessionId) {
+                console.log('❌ Step7World - No session ID, aborting API call');
+                return;
+            }
+
+            // Additional guard: check if we even have previous step data
+            const hasGenre = this.$store.wizard.formData.genre;
+            const hasStructure = this.$store.wizard.formData.structure;
+
+            if (!hasGenre || !hasStructure) {
+                console.log('❌ Step7World - Missing required previous step data:', {
+                    hasGenre, hasStructure
+                });
+                console.log('❌ Step7World - Using fallback data instead of API call');
+                this.options = this.getSampleWorlds();
+                return;
+            }
+
             try {
+                console.log('🌐 Step7World - Making API call to processStep(7, null)');
                 const success = await this.$store.wizard.processStep(7, null);
+                console.log('🌐 Step7World - loadWorldOptions result:', success);
+
                 if (success) {
+                    console.log('✅ Step7World - API call successful, reloading step data');
                     this.loadStepData();
+                } else {
+                    console.log('❌ Step7World - API call failed, using fallback');
+                    this.options = this.getSampleWorlds();
                 }
             } catch (error) {
-                console.error('Error loading world options:', error);
+                console.error('💥 Step7World - Error loading world options:', error);
                 // Fallback to sample data
+                console.log('🔄 Step7World - Using fallback sample data');
                 this.options = this.getSampleWorlds();
             }
         },
 
         // Utility methods
         getOptionById(optionId) {
-            return this.options.find(option => option.id === optionId);
+            const option = this.options.find(option => option.id === optionId);
+            console.log('🔍 Step7World - getOptionById called with:', optionId, 'found:', option);
+            return option;
         },
 
         getSelectedWorldInfo() {
-            return this.getOptionById(this.selectedWorld);
+            const info = this.getOptionById(this.selectedWorld);
+            console.log('ℹ️ Step7World - getSelectedWorldInfo:', info);
+            return info;
         },
 
         formatRecommendationScore(score) {
@@ -145,7 +322,13 @@ function step7World() {
 
         // Sample worlds for testing/fallback
         getSampleWorlds() {
-            const selectedGenre = this.$store.wizard.formData.genre;
+            console.log('📦 Step7World - getSampleWorlds called');
+
+            const selectedGenre = this.selectedGenre;
+
+            console.log('📦 Step7World - getSampleWorlds context:', {
+                selectedGenre
+            });
 
             // Base world types that work for most genres
             const baseWorlds = [
@@ -196,67 +379,31 @@ function step7World() {
                     recommendation_score: 88,
                     research_complexity: 'low',
                     commercial_appeal: 'Very High',
-                    why_recommended: 'Combines familiar setting with fantasy elements'
-                });
-            } else if (selectedGenre === 'romance') {
-                baseWorlds.push({
-                    id: 'workplace',
-                    name: 'Workplace Setting',
-                    description: 'Professional environments like offices, hospitals, schools',
-                    recommendation_score: 85,
-                    research_complexity: 'low',
-                    commercial_appeal: 'Very High',
-                    why_recommended: 'Built-in conflict and forced proximity'
-                });
-                baseWorlds.push({
-                    id: 'vacation_destination',
-                    name: 'Vacation/Resort Setting',
-                    description: 'Romantic locations like beaches, mountains, or exotic destinations',
-                    recommendation_score: 82,
-                    research_complexity: 'medium',
-                    commercial_appeal: 'High',
-                    why_recommended: 'Inherently romantic atmosphere'
-                });
-            } else if (selectedGenre === 'mystery') {
-                baseWorlds.push({
-                    id: 'closed_community',
-                    name: 'Closed Community',
-                    description: 'Isolated settings like islands, boarding schools, or gated communities',
-                    recommendation_score: 92,
-                    research_complexity: 'low',
-                    commercial_appeal: 'Excellent',
-                    why_recommended: 'Limited suspects and heightened tension'
-                });
-                baseWorlds.push({
-                    id: 'institutional',
-                    name: 'Institutional Setting',
-                    description: 'Police departments, law firms, or other professional institutions',
-                    recommendation_score: 80,
-                    research_complexity: 'medium',
-                    commercial_appeal: 'High',
-                    why_recommended: 'Built-in expertise and procedural elements'
+                    why_recommended: 'Combines familiar settings with exciting magical elements'
                 });
             } else if (selectedGenre === 'science_fiction') {
                 baseWorlds.push({
                     id: 'near_future',
                     name: 'Near Future Earth',
-                    description: 'Earth 20-50 years in the future with recognizable technology',
+                    description: 'Earth 20-100 years in the future with believable technology',
                     recommendation_score: 85,
                     research_complexity: 'medium',
                     commercial_appeal: 'High',
-                    why_recommended: 'Accessible to general readers'
+                    why_recommended: 'Relatable yet exciting for sci-fi readers'
                 });
+            } else if (selectedGenre === 'mystery') {
                 baseWorlds.push({
-                    id: 'space_station',
-                    name: 'Space Station/Ship',
-                    description: 'Contained space environments with clear boundaries',
-                    recommendation_score: 78,
-                    research_complexity: 'medium',
-                    commercial_appeal: 'Good',
-                    why_recommended: 'Controlled environment for storytelling'
+                    id: 'urban_setting',
+                    name: 'Urban/City Setting',
+                    description: 'Complex urban environments with diverse investigation opportunities',
+                    recommendation_score: 90,
+                    research_complexity: 'low',
+                    commercial_appeal: 'Very High',
+                    why_recommended: 'Perfect for complex mysteries and diverse character interactions'
                 });
             }
 
+            console.log('📦 Step7World - Generated sample worlds:', baseWorlds.length, 'options');
             return baseWorlds;
         },
 
@@ -282,13 +429,20 @@ function step7World() {
             return 'bg-gray-100 text-gray-800';
         },
 
-        getResearchBadgeClass(complexity) {
+        getComplexityBadgeClass(complexity) {
             const classes = {
                 'low': 'bg-green-100 text-green-800',
                 'medium': 'bg-yellow-100 text-yellow-800',
                 'high': 'bg-red-100 text-red-800'
             };
             return classes[complexity] || 'bg-gray-100 text-gray-800';
+        },
+
+        // Navigation
+        goBack() {
+            console.log('⬅️ Step7World - goBack called');
+            // Go back to step 6 (story structure)
+            this.$store.wizard.setCurrentStep(6);
         }
     };
 }

@@ -16,117 +16,294 @@ function step6Structure() {
         // UI state
         hoveredOption: null,
 
-        // Computed
+        // Computed properties with logging
         get hasSelection() {
-            return this.selectedStructure !== '';
+            const result = this.selectedStructure !== '';
+            console.log('✅ Step6Structure - hasSelection:', result, 'selectedStructure:', this.selectedStructure);
+            return result;
         },
 
         get canProceed() {
-            return this.hasSelection;
+            const result = this.hasSelection;
+            console.log('🚀 Step6Structure - canProceed:', result);
+            return result;
+        },
+
+        // Access wizard store data with logging
+        get currentStepData() {
+            const data = this.$store.wizard.currentStepData;
+            console.log('📊 Step6Structure - currentStepData accessed:', data);
+            return data;
+        },
+
+        get selectedGenre() {
+            const genre = this.$store.wizard.formData.genre;
+            console.log('🎭 Step6Structure - selectedGenre:', genre);
+            return genre;
+        },
+
+        get selectedLength() {
+            const length = this.$store.wizard.formData.length;
+            console.log('📏 Step6Structure - selectedLength:', length);
+            return length;
         },
 
         // Methods
         async selectStructure(structureId) {
+            console.log('🎯 Step6Structure - selectStructure called with:', structureId);
             this.selectedStructure = structureId;
 
             // Update store
             this.$store.wizard.updateFormData('structure', structureId);
+            console.log('📝 Step6Structure - Updated formData with structure:', structureId);
 
             // Process structure selection
             await this.processStructureSelection();
         },
 
         async processStructureSelection() {
-            if (!this.selectedStructure) return;
+            console.log('⚡ Step6Structure - processStructureSelection started');
+            console.log('⚡ Step6Structure - selectedStructure:', this.selectedStructure);
+
+            if (!this.selectedStructure) {
+                console.log('❌ Step6Structure - No selectedStructure, aborting');
+                return;
+            }
 
             this.isSubmitting = true;
+            console.log('⚡ Step6Structure - Set isSubmitting to true');
 
             try {
+                console.log('🌐 Step6Structure - Calling processStep with:', {
+                    stepNumber: 6,
+                    selection: this.selectedStructure
+                });
+
                 const success = await this.$store.wizard.processStep(
                     6, // Step number
                     this.selectedStructure
                 );
 
+                console.log('🌐 Step6Structure - processStep result:', success);
+
                 if (success) {
+                    console.log('🔥 Step6Structure - Processing successful, proceeding to next step');
                     await this.proceedToNextStep();
+                } else {
+                    console.error('❌ Step6Structure - processStep failed');
                 }
             } catch (error) {
-                console.error('Error processing structure selection:', error);
+                console.error('💥 Step6Structure - Error in processStructureSelection:', error);
             } finally {
                 this.isSubmitting = false;
+                console.log('🔥 Step6Structure - processStructureSelection finished');
             }
         },
 
         async proceedToNextStep() {
+            console.log('➡️ Step6Structure - proceedToNextStep called');
+
             // Move to step 7 (world building)
             this.$store.wizard.setCurrentStep(7);
+            console.log('➡️ Step6Structure - Set current step to 7');
 
             // Load step 7 data
             await this.loadWorldBuildingData();
         },
 
         async loadWorldBuildingData() {
+            console.log('🌐 Step6Structure - loadWorldBuildingData called');
+
             try {
                 const success = await this.$store.wizard.processStep(7, null);
+                console.log('🌐 Step6Structure - loadWorldBuildingData result:', success);
                 // Step 7 data will be loaded automatically through the store
             } catch (error) {
-                console.error('Error loading world building data:', error);
+                console.error('💥 Step6Structure - Error loading world building data:', error);
             }
         },
 
-        // Data loading
+        // Data loading with comprehensive logging
         loadStepData() {
-            const stepData = this.$store.wizard.currentStepData;
+            console.log('📥 Step6Structure - loadStepData called');
 
-            this.options = stepData.options || [];
-            this.llmMessage = stepData.llmReasoning || this.getDefaultMessage();
+            const stepData = this.$store.wizard.currentStepData;
+            console.log('📥 Step6Structure - Raw stepData:', stepData);
+
+            // Load options with fallback
+            if (stepData && stepData.options && stepData.options.length > 0) {
+                console.log('📥 Step6Structure - Using stepData.options:', stepData.options.length, 'options');
+                this.options = stepData.options;
+            } else {
+                console.log('📥 Step6Structure - No stepData.options, keeping current options or using getSampleStructures');
+                if (this.options.length === 0) {
+                    this.options = this.getSampleStructures();
+                }
+            }
+            console.log('📥 Step6Structure - Final this.options length:', this.options.length);
+
+            // Set LLM message
+            const newMessage = stepData?.llmReasoning || this.getDefaultMessage();
+            console.log('📥 Step6Structure - Setting llmMessage:', newMessage);
+            this.llmMessage = newMessage;
 
             // Load any existing selection
-            this.selectedStructure = this.$store.wizard.formData.structure || '';
+            const existingSelection = this.$store.wizard.formData.structure || '';
+            console.log('📥 Step6Structure - Loading existing selection:', existingSelection);
+            this.selectedStructure = existingSelection;
+
+            console.log('📥 Step6Structure - loadStepData completed');
         },
 
         getDefaultMessage() {
-            const selectedGenre = this.$store.wizard.formData.genre;
-            return `These proven structures work excellently for ${selectedGenre || 'your chosen genre'} books:`;
+            const selectedGenre = this.selectedGenre;
+            const message = `These proven structures work excellently for ${selectedGenre || 'your chosen genre'} books:`;
+            console.log('💬 Step6Structure - getDefaultMessage:', message);
+            return message;
         },
 
-        // Navigation
-        goBack() {
-            // Go back to step 5 (book length)
-            this.$store.wizard.setCurrentStep(5);
-        },
-
-        // Lifecycle
+        // Lifecycle with comprehensive logging
         init() {
+            // IMMEDIATE early return if not on step 6 - don't even log
+            if (this.$store.wizard.currentStep !== 6) {
+                return;
+            }
+
+            console.log('🏁 Step6Structure - INIT STARTING');
+            console.log('🏁 Step6Structure - Component initialization...');
+
+            // Log wizard store state
+            console.log('🏪 Step6Structure - Wizard Store State:');
+            console.log('🏪 Step6Structure - currentStep:', this.$store.wizard.currentStep);
+            console.log('🏪 Step6Structure - sessionId:', this.$store.wizard.sessionId);
+            console.log('🏪 Step6Structure - formData:', this.$store.wizard.formData);
+            console.log('🏪 Step6Structure - currentStepData:', this.$store.wizard.currentStepData);
+
+            // Initialize with fallback data first to show something
+            this.options = this.getSampleStructures();
+            this.llmMessage = this.getDefaultMessage();
+            console.log('📦 Step6Structure - Initialized with fallback data');
+
+            // CRITICAL: Check if we have a valid session before making API calls
+            if (!this.$store.wizard.sessionId) {
+                console.log('❌ Step6Structure - No session ID, staying with fallback data');
+                console.log('🏁 Step6Structure - INIT COMPLETED (with fallback data)');
+                return;
+            }
+
+            // Load current step data from wizard store
+            console.log('📥 Step6Structure - Loading step data from store...');
             this.loadStepData();
 
-            // If we don't have step data, load it
-            if (this.options.length === 0 || !this.options[0].id) {
-                this.loadStructureOptions();
+            // Check if we have step data from previous navigation
+            if (this.currentStepData?.options && this.currentStepData.options.length > 0) {
+                console.log('✅ Step6Structure - Found existing step data, using it');
+                this.options = this.currentStepData.options;
+                this.llmMessage = this.currentStepData.llmReasoning || this.getDefaultMessage();
+                console.log('🏁 Step6Structure - INIT COMPLETED (with existing data)');
+                return;
+            }
+
+            // Only make API call if we have session and don't have options and we're on step 6
+            console.log('🌐 Step6Structure - No step data found, loading from API...');
+            this.loadStructureOptions();
+
+            console.log('🏁 Step6Structure - INIT COMPLETED');
+        },
+
+        // Add a method to be called when step becomes visible
+        async onStepVisible() {
+            console.log('👁️ Step6Structure - onStepVisible called');
+
+            if (this.$store.wizard.currentStep !== 6) {
+                console.log('❌ Step6Structure - Not on step 6, ignoring visibility');
+                return;
+            }
+
+            // Wait a moment for any pending store updates
+            await this.$nextTick();
+
+            // Check if we have fresh data from the previous step
+            console.log('👁️ Step6Structure - Checking for fresh data...');
+            const freshStepData = this.$store.wizard.currentStepData;
+            console.log('👁️ Step6Structure - Fresh step data:', freshStepData);
+
+            // If we have step data with options, use it
+            if (freshStepData && freshStepData.options && freshStepData.options.length > 0) {
+                console.log('✅ Step6Structure - Found fresh step data, updating options');
+                this.options = freshStepData.options;
+                this.llmMessage = freshStepData.llmReasoning || this.getDefaultMessage();
+                return;
+            }
+
+            // Initialize if not already done
+            if (this.options.length === 0) {
+                console.log('🔄 Step6Structure - No options loaded, initializing...');
+                this.options = this.getSampleStructures();
+                this.llmMessage = this.getDefaultMessage();
+            } else {
+                console.log('✅ Step6Structure - Already have options:', this.options.length);
             }
         },
 
         async loadStructureOptions() {
-            // Load options based on current selections
+            console.log('🌐 Step6Structure - loadStructureOptions called');
+
+            // Final safety checks - MULTIPLE GUARDS
+            if (this.$store.wizard.currentStep !== 6) {
+                console.log('❌ Step6Structure - Not on Step 6, aborting API call. Current step:', this.$store.wizard.currentStep);
+                return;
+            }
+
+            if (!this.$store.wizard.sessionId) {
+                console.log('❌ Step6Structure - No session ID, aborting API call');
+                return;
+            }
+
+            // Additional guard: check if we even have previous step data
+            const hasGenre = this.$store.wizard.formData.genre;
+            const hasLength = this.$store.wizard.formData.length;
+
+            if (!hasGenre || !hasLength) {
+                console.log('❌ Step6Structure - Missing required previous step data:', {
+                    hasGenre, hasLength
+                });
+                console.log('❌ Step6Structure - Using fallback data instead of API call');
+                this.options = this.getSampleStructures();
+                return;
+            }
+
             try {
+                console.log('🌐 Step6Structure - Making API call to processStep(6, null)');
                 const success = await this.$store.wizard.processStep(6, null);
+                console.log('🌐 Step6Structure - loadStructureOptions result:', success);
+
                 if (success) {
+                    console.log('✅ Step6Structure - API call successful, reloading step data');
                     this.loadStepData();
+                } else {
+                    console.log('❌ Step6Structure - API call failed, using fallback');
+                    this.options = this.getSampleStructures();
                 }
             } catch (error) {
-                console.error('Error loading structure options:', error);
+                console.error('💥 Step6Structure - Error loading structure options:', error);
                 // Fallback to sample data
+                console.log('🔄 Step6Structure - Using fallback sample data');
                 this.options = this.getSampleStructures();
             }
         },
 
         // Utility methods
         getOptionById(optionId) {
-            return this.options.find(option => option.id === optionId);
+            const option = this.options.find(option => option.id === optionId);
+            console.log('🔍 Step6Structure - getOptionById called with:', optionId, 'found:', option);
+            return option;
         },
 
         getSelectedStructureInfo() {
-            return this.getOptionById(this.selectedStructure);
+            const info = this.getOptionById(this.selectedStructure);
+            console.log('ℹ️ Step6Structure - getSelectedStructureInfo:', info);
+            return info;
         },
 
         formatRecommendationScore(score) {
@@ -145,7 +322,13 @@ function step6Structure() {
 
         // Sample structures for testing/fallback
         getSampleStructures() {
-            const selectedGenre = this.$store.wizard.formData.genre;
+            console.log('📦 Step6Structure - getSampleStructures called');
+
+            const selectedGenre = this.selectedGenre;
+
+            console.log('📦 Step6Structure - getSampleStructures context:', {
+                selectedGenre
+            });
 
             // Base structures that work for most genres
             const baseStructures = [
@@ -201,6 +384,7 @@ function step6Structure() {
                 });
             }
 
+            console.log('📦 Step6Structure - Generated sample structures:', baseStructures.length, 'options');
             return baseStructures;
         },
 
@@ -233,6 +417,13 @@ function step6Structure() {
                 'hard': 'bg-red-100 text-red-800'
             };
             return classes[difficulty] || 'bg-gray-100 text-gray-800';
+        },
+
+        // Navigation
+        goBack() {
+            console.log('⬅️ Step6Structure - goBack called');
+            // Go back to step 5 (book length)
+            this.$store.wizard.setCurrentStep(5);
         }
     };
 }
