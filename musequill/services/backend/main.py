@@ -20,6 +20,11 @@ import logging
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+from musequill.config import (
+    Settings,
+    get_settings
+)
+
 # Import our book model
 from musequill.services.backend.model.book import BookModelType
 from musequill.services.backend.prompts import (
@@ -158,6 +163,11 @@ def display_book_info(book_model: BookModelType) -> None:
 
 
 async def main():
+
+    config = get_settings()
+    
+    logger.info(f"Loaded configuration: {config.model_dump_json(indent=2)}")
+
     """Main function to handle command line arguments and orchestrate the process."""
     parser = argparse.ArgumentParser(
         description="Load and convert JSON templates to BookModelType",
