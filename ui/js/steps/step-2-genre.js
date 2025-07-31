@@ -85,17 +85,55 @@ function step2Genre() {
                 const enhancedRecs = this.genreRecommendations.map(rec => {
                     console.log('🎯 Step2Genre - Processing recommendation:', rec);
 
+                    // Extract genre info from multiple possible formats
+                    let genreValue, genreDisplayName, subgenreValue, subgenreDisplayName;
+
+                    // Format 1: rec.genre.value structure
+                    if (rec.genre && typeof rec.genre === 'object' && rec.genre.value) {
+                        genreValue = rec.genre.value;
+                        genreDisplayName = rec.genre.display_name || rec.genre.name || genreValue;
+                    }
+                    // Format 2: rec.genre_id structure  
+                    else if (rec.genre_id) {
+                        genreValue = rec.genre_id;
+                        genreDisplayName = rec.genre_name || rec.genre_display_name || genreValue;
+                    }
+                    // Format 3: rec.genre as string
+                    else if (typeof rec.genre === 'string') {
+                        genreValue = rec.genre;
+                        genreDisplayName = rec.genre_name || rec.genre_display_name || genreValue;
+                    }
+
+                    // Extract subgenre info from multiple possible formats
+                    if (rec.subgenre && typeof rec.subgenre === 'object' && rec.subgenre.value) {
+                        subgenreValue = rec.subgenre.value;
+                        subgenreDisplayName = rec.subgenre.display_name || rec.subgenre.name || subgenreValue;
+                    }
+                    else if (rec.subgenre_id) {
+                        subgenreValue = rec.subgenre_id;
+                        subgenreDisplayName = rec.subgenre_name || rec.subgenre_display_name || subgenreValue;
+                    }
+                    else if (typeof rec.subgenre === 'string') {
+                        subgenreValue = rec.subgenre;
+                        subgenreDisplayName = rec.subgenre_name || rec.subgenre_display_name || subgenreValue;
+                    }
+
+                    // Log what we extracted
+                    console.log('🔍 Extracted - Genre:', genreValue, 'Display:', genreDisplayName);
+                    console.log('🔍 Extracted - Subgenre:', subgenreValue, 'Display:', subgenreDisplayName);
+
+                    // Build enhanced recommendation with fallbacks
                     const enhanced = {
-                        id: `${rec.genre.value}/${rec.subgenre.value}`,
-                        genre_id: rec.genre.value,
-                        subgenre_id: rec.subgenre.value,
-                        name: rec.display_name || `${rec.genre.display_name} - ${rec.subgenre.display_name}`,
-                        description: rec.reasoning || `${rec.genre.display_name} with ${rec.subgenre.display_name} elements`,
-                        recommendation_score: Math.round(rec.confidence * 100),
-                        market_appeal: this.getMarketAppeal(rec.confidence),
+                        id: `${genreValue || 'unknown'}/${subgenreValue || 'unknown'}`,
+                        genre_id: genreValue,
+                        subgenre_id: subgenreValue,
+                        name: rec.display_name || `${genreDisplayName || genreValue} - ${subgenreDisplayName || subgenreValue}`,
+                        description: rec.reasoning || `${genreDisplayName || genreValue} with ${subgenreDisplayName || subgenreValue} elements`,
+                        recommendation_score: Math.round((rec.confidence || 0) * 100),
+                        market_appeal: this.getMarketAppeal(rec.confidence || 0),
                         source: 'llm_analysis',
-                        confidence: rec.confidence,
-                        reasoning: rec.reasoning
+                        confidence: rec.confidence || 0,
+                        reasoning: rec.reasoning || 'No reasoning provided'
                     };
 
                     console.log('🎯 Step2Genre - Enhanced recommendation:', enhanced);
