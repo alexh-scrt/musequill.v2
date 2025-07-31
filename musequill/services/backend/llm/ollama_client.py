@@ -23,13 +23,19 @@ class LLMService:
         base_url: str = "http://localhost:11434",
         temperature: float = 0.3,
         max_tokens: Optional[int] = None,
-        top_p: float = 1.0
+        top_p: float = 1.0,
+        top_k: Optional[int] = None,
+        repeat_penalty: Optional[float] = None,
+        stop: Optional[str] = None
     ):
         self.model_name = model_name
         self.base_url = base_url
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.top_p = top_p
+        self.top_k = top_k
+        self.repeat_penalty = repeat_penalty
+        self.stop = stop
         self.llm = None
         
     async def initialize(self):
@@ -42,7 +48,12 @@ class LLMService:
                 "temperature": self.temperature,
                 "top_p": self.top_p
             }
-            
+            if self.top_k is not None:
+                init_params["top_k"] = self.top_k
+            if self.repeat_penalty is not None:
+                init_params["repeat_penalty"] = self.repeat_penalty
+            if self.stop is not None:
+                init_params["stop"] = self.stop
             # Only add max_tokens if it's specified (some models don't support it)
             if self.max_tokens is not None:
                 init_params["num_predict"] = self.max_tokens  # Ollama uses 'num_predict' instead of 'max_tokens'
@@ -50,7 +61,9 @@ class LLMService:
             self.llm = OllamaLLM(**init_params)
             logger.info(f"LLM service initialized with model: {self.model_name}, "
                        f"temperature: {self.temperature}, top_p: {self.top_p}, "
-                       f"max_tokens: {self.max_tokens}")
+                       f"max_tokens: {self.max_tokens}"
+                       f"top_k: {self.top_k}, repeat_penalty: {self.repeat_penalty}"
+                       f"stop: {self.stop}")
         except Exception as e:
             logger.error(f"Failed to initialize LLM: {e}")
             raise
@@ -145,7 +158,10 @@ class LLMService:
         self, 
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        top_p: Optional[float] = None
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        repeat_penalty: Optional[float] = None,
+        stop: Optional[str] = None
     ):
         """
         Update the default parameters for future requests.
@@ -162,9 +178,16 @@ class LLMService:
             self.max_tokens = max_tokens
         if top_p is not None:
             self.top_p = top_p
-            
+        if top_k is not None:
+            self.top_k = top_k
+        if repeat_penalty is not None:
+            self.repeat_penalty = repeat_penalty
+        if stop is not None:
+            self.stop = stop
+
         logger.info(f"Updated default parameters: temperature={self.temperature}, "
-                   f"max_tokens={self.max_tokens}, top_p={self.top_p}")
+                   f"max_tokens={self.max_tokens}, top_p={self.top_p}"
+                   f"top_k={self.top_k}, repeat_penalty={self.repeat_penalty}, stop={self.stop}")
         logger.info("Call initialize() again to apply these changes to the LLM instance")
     
     def get_current_parameters(self) -> Dict[str, Any]:

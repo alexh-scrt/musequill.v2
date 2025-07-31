@@ -13,11 +13,15 @@ from .payloads import (
     clean_json_string
 )
 
+from .tick import (
+    tick
+)
 __all__ = [
     'generate_filename',
     'seconds_to_time_string',
     'extract_json_array_from_response',
     'extract_json_from_response',
     'is_valid_json',
-    'clean_json_string'
+    'clean_json_string',
+    'tick'
 ]

@@ -23,7 +23,12 @@ sys.path.insert(0, str(project_root))
 # Import our book model
 from musequill.services.backend.model.book import BookModelType
 from musequill.services.backend.prompts import (
+    BookSummaryPromptGenerator,
+    BookSummaryConfig,
     BlueprintPromptGenerator,
+    PlanningPromptGenerator,
+    PlanningConfig,
+    ResearchPromptGenerator,
     generate_validation_prompt
 )
 from musequill.services.backend.model import (
@@ -234,71 +239,166 @@ Examples:
     logger.info(f"\n✅ Successfully processed template: {args.template}")
 
     try:
-        prompt = BlueprintPromptGenerator.generate_prompt(book_model)
-        
+        recommended_model_settings: Optional[dict] = None
+        llm_service = LLMService(model_name="llama3.3:70b")
+        await llm_service.initialize()
+        logger.info("LLM Service initialized successfully")
+
+        bspg = BookSummaryPromptGenerator()
+        book_data = book_model.model_dump()
+        prompt = bspg.generate_prompt(book_data)
+        llm_service.update_default_parameters(
+            temperature=0.3,
+            max_tokens=5000,
+            top_p=0.5
+        )
+
         if args.output:
             output_path.parent.mkdir(exist_ok=True)
             prompt_filename = generate_filename(
                 output_path,
-                prefix="blueprint",
-                extension="txt"
+                prefix="summary-prompt",
+                extension="md"
             )
-            BlueprintPromptGenerator.save_prompt_to_file(book_model, prompt_filename)
+            bspg.save_prompt_to_file(prompt, prompt_filename)
         else:
             print(prompt)
-        recommended_model_settings: Optional[dict] = None
-        if args.stats:
-            stats = BlueprintPromptGenerator.get_prompt_statistics(book_model)
-            recommended_model_settings = stats.get('recommended_model_settings')
-            print("\n" + "="*50)
-            print("PROMPT STATISTICS")
-            print("="*50)
-            for key, value in stats.items():
-                if isinstance(value, dict):
-                    print(f"{key}:")
-                    for sub_key, sub_value in value.items():
-                        print(f"  {sub_key}: {sub_value}")
-                else:
-                    print(f"{key}: {value}")
+        stats = bspg.get_prompt_statistics(book_model.model_dump())
+        print("\n" + "="*50)
+        print("PROMPT STATISTICS")
+        print("="*50)
+        for key, value in stats.items():
+            if isinstance(value, dict):
+                print(f"{key}:")
+                for sub_key, sub_value in value.items():
+                    print(f"  {sub_key}: {sub_value}")
+            else:
+                print(f"{key}: {value}")
+        recommended_model_settings = stats.get('recommended_model_settings')
 
-    except Exception as e:
-        logger.error(f"Error: {e}")
-
-    try:
-        llm_service = LLMService(model_name="llama3.3:70b")
         if recommended_model_settings:
             llm_service.update_default_parameters(
-                temperature=0.3,
+                temperature=recommended_model_settings.get('temperature', 0.7),
                 max_tokens=recommended_model_settings.get('max_tokens', 5000),
-                top_p=recommended_model_settings.get('top_p', 0.5)
+                top_p=recommended_model_settings.get('top_p', 0.5),
+                top_k=recommended_model_settings.get('top_k', 40),
+                repeat_penalty=recommended_model_settings.get('repeat_penalty', 1.1),
+                stop=recommended_model_settings.get("stop")
             )
+            await llm_service.initialize()
+
+        response = await llm_service.generate([prompt])
+        if response.get('timelapse', 0):
+            print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
+
+        output_path.parent.mkdir(exist_ok=True)
+        response_filename = generate_filename(
+            output_path,
+            prefix="summary-response",
+            extension="md"
+        )
+        with open(response_filename, 'w', encoding='utf-8') as f:
+            f.write(response['response'])
+
+        book_summary = response['response']
+
+        # Blueprint Generation
+        prompt = BlueprintPromptGenerator.generate_prompt(book_model)
+        stats = BlueprintPromptGenerator.get_prompt_statistics(book_model)
+        recommended_model_settings = stats.get('recommended_model_settings')
+        print("\n" + "="*50)
+        print("PROMPT STATISTICS")
+        print("="*50)
+        for key, value in stats.items():
+            if isinstance(value, dict):
+                print(f"{key}:")
+                for sub_key, sub_value in value.items():
+                    print(f"  {sub_key}: {sub_value}")
+            else:
+                print(f"{key}: {value}")
+
+        llm_service.update_default_parameters(
+            temperature=0.3,
+            top_p=0.7
+        )
         await llm_service.initialize()
-        logger.info("LLM Service initialized successfully")
+
         response = await llm_service.generate([prompt])
         if response.get('timelapse', 0):
             print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
         if args.output:
             json_payload = extract_json_from_response(response['response'])
-            # validation_prompt = generate_validation_prompt(json_payload)
-
-            # response = await llm_service.generate([validation_prompt])
-            # if response.get('timelapse', 0):
-            #     print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
-
             output_path.parent.mkdir(exist_ok=True)
             response_filename = generate_filename(
                 output_path,
                 prefix="blueprint-response",
                 extension="json"
             )
-            # json_payload = extract_json_from_response(response['response'])
             with open(response_filename, 'w', encoding='utf-8') as f:
                 f.write(json.dumps(json_payload))
 
-            blueprint = BookBlueprint(**json_payload)
-            blueprint.self_validate()
-            print(blueprint)
+        # Planning
+        pc = PlanningConfig()
+        ppg = PlanningPromptGenerator(pc)
+        prompt = ppg.generate_planning_prompt(json_payload)
+        prompt_filename = generate_filename(
+            output_path,
+            prefix="plan",
+            extension="txt"
+        )
+        ppg.save_prompt_to_file(prompt, prompt_filename)
+        stats = ppg.get_prompt_stats(prompt)
+        recommended_model_settings = stats.get('recommended_model_settings')
+        print("\n" + "="*50)
+        print("PROMPT STATISTICS")
+        print("="*50)
+        for key, value in stats.items():
+            if isinstance(value, dict):
+                print(f"{key}:")
+                for sub_key, sub_value in value.items():
+                    print(f"  {sub_key}: {sub_value}")
+            else:
+                print(f"{key}: {value}")
+        llm_service.update_default_parameters(
+            temperature=1.3,
+            max_tokens=5000,
+            top_p=0.5
+        )
+        await llm_service.initialize()
 
+        response = await llm_service.generate([prompt])
+        if response.get('timelapse', 0):
+            print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
+        plan_filename = generate_filename(
+            output_path,
+            prefix="plan",
+            extension="md"
+        )
+        with open(plan_filename, 'w', encoding='utf-8') as f:
+            f.write(response['response'])
+
+        book_plan = response['response']
+
+        # Research
+        prompt = ResearchPromptGenerator.generate_prompt(book_summary, book_plan)
+        llm_service.update_default_parameters(
+            temperature=0.3,
+        )
+        await llm_service.initialize()
+
+        response = await llm_service.generate([prompt])
+        if response.get('timelapse', 0):
+            print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
+        plan_filename = generate_filename(
+            output_path,
+            prefix="research",
+            extension="json"
+        )
+        json_payload = extract_json_from_response(response['response'])
+        with open(plan_filename, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(json_payload))
+        
+        print('DONE')
     except Exception as e:
         logger.error(f"Error: {e}")
 
