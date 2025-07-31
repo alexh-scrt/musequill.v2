@@ -23,12 +23,18 @@ sys.path.insert(0, str(project_root))
 # Import our book model
 from musequill.services.backend.model.book import BookModelType
 from musequill.services.backend.prompts import (
-    BlueprintPromptGenerator
+    BlueprintPromptGenerator,
+    generate_validation_prompt
+)
+from musequill.services.backend.model import (
+    BookModelType,
+    BookBlueprint
 )
 from musequill.services.backend.llm.ollama_client import LLMService
 from musequill.services.backend.utils import (
     generate_filename,
-    seconds_to_time_string
+    seconds_to_time_string,
+    extract_json_from_response
 )
 # Configure logging
 logging.basicConfig(
@@ -240,9 +246,10 @@ Examples:
             BlueprintPromptGenerator.save_prompt_to_file(book_model, prompt_filename)
         else:
             print(prompt)
-        
+        recommended_model_settings: Optional[dict] = None
         if args.stats:
             stats = BlueprintPromptGenerator.get_prompt_statistics(book_model)
+            recommended_model_settings = stats.get('recommended_model_settings')
             print("\n" + "="*50)
             print("PROMPT STATISTICS")
             print("="*50)
@@ -259,22 +266,39 @@ Examples:
 
     try:
         llm_service = LLMService(model_name="llama3.3:70b")
+        if recommended_model_settings:
+            llm_service.update_default_parameters(
+                temperature=0.3,
+                max_tokens=recommended_model_settings.get('max_tokens', 5000),
+                top_p=recommended_model_settings.get('top_p', 0.5)
+            )
         await llm_service.initialize()
         logger.info("LLM Service initialized successfully")
         response = await llm_service.generate([prompt])
         if response.get('timelapse', 0):
             print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
         if args.output:
+            json_payload = extract_json_from_response(response['response'])
+            # validation_prompt = generate_validation_prompt(json_payload)
+
+            # response = await llm_service.generate([validation_prompt])
+            # if response.get('timelapse', 0):
+            #     print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
+
             output_path.parent.mkdir(exist_ok=True)
             response_filename = generate_filename(
                 output_path,
                 prefix="blueprint-response",
-                extension="md"
+                extension="json"
             )
+            # json_payload = extract_json_from_response(response['response'])
             with open(response_filename, 'w', encoding='utf-8') as f:
-                f.write(response['response'])
+                f.write(json.dumps(json_payload))
 
-        print(response)
+            blueprint = BookBlueprint(**json_payload)
+            blueprint.self_validate()
+            print(blueprint)
+
     except Exception as e:
         logger.error(f"Error: {e}")
 

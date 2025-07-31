@@ -27,6 +27,8 @@ from .book import (
     validate_book_template
 )
 
+from .book_blueprint_model import *
+
 __all__ = [
     "BookModelType",
     "BookInfo",
@@ -46,5 +48,17 @@ __all__ = [
     "World",
     "Style",
     "create_book_model_from_json",
-    "validate_book_template"
+    "validate_book_template",
+    "BookBlueprint",
+    "KeyPlotPoint",
+    "CharacterArcMilestone",
+    "ChapterFunction",
+    "CharacterArcFramework",
+    "CharacterRelationship",
+    "CompTitle",
+    "TargetReaderProfile",
+    "MarketPositioning",
+    "PublishingReadiness",
+    "LaunchStrategyFramework",
+    "Phase7",
 ]

@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """
-Blueprint Prompt Generator for Book Writing
+Blueprint Prompt Generator for Book Writing - JSON Output Version
 
 This script takes a BookModelType instance and generates an optimized prompt
-for Llama 3.3-8B to create a comprehensive book writing blueprint.
+for Llama 3.3-8B to create a comprehensive book writing blueprint in JSON format.
 """
 
 import json
 from typing import Dict, Any
 from musequill.services.backend.model.book import BookModelType
-
+from .target_json_schema import TARGET_JSON_SCHEMA, EXPECTED_OUTPUT
 
 class BlueprintPromptGenerator:
-    """Generates optimized prompts for book writing blueprint creation."""
+    """Generates optimized prompts for book writing blueprint creation with JSON output."""
     
     SYSTEM_PROMPT = """You are an expert book writing consultant and publishing strategist. Your task is to create a comprehensive, actionable book writing blueprint based on the provided book template data. You must analyze all elements systematically and provide concrete, step-by-step guidance that transforms the template into a complete writing plan.
+
+## CRITICAL OUTPUT REQUIREMENT
+You MUST respond with a valid JSON object following the exact structure provided in the JSON Schema below. Do not include any text before or after the JSON. Do not use markdown code blocks. Return only pure JSON.
 
 ## Response Guidelines
 
@@ -22,8 +25,8 @@ class BlueprintPromptGenerator:
 2. **Use Data**: Reference specific elements from the input template throughout your response
 3. **Maintain Coherence**: Ensure all recommendations align with the book's established parameters
 4. **Prioritize Commercially**: Focus on market-viable approaches that increase publication success
-5. **Structure Clearly**: Use the exact headings and formatting specified
-6. **Length Target**: Aim for 1500-2000 words total to provide comprehensive coverage
+5. **Structure as JSON**: Follow the exact JSON schema provided
+6. **Comprehensive Coverage**: Ensure every field in the schema is populated with meaningful content
 7. **Practical Focus**: Every recommendation should be implementable by the author
 
 ## Critical Success Factors
@@ -36,148 +39,34 @@ class BlueprintPromptGenerator:
 - Pacing that maintains reader engagement throughout the specified length
 - Research integration that enhances rather than interrupts narrative flow"""
 
-    BLUEPRINT_FRAMEWORK = """# BOOK WRITING BLUEPRINT
+    BLUEPRINT_INSTRUCTIONS = """
+## JSON Blueprint Generation Instructions
 
-## Phase 1: Strategic Foundation Analysis
+Based on the book template data provided, create a comprehensive book writing blueprint following the seven-phase framework. Each phase must be populated with specific, actionable guidance tailored to the template's unique characteristics.
 
-Analyze the template data and establish the strategic foundation:
+### Phase 1: Strategic Foundation Analysis
+Analyze the template data and establish strategic foundation with commercial viability assessment, target market definition, competitive positioning, unique value proposition, and publishing path recommendation.
 
-### Strategic Foundation
-- **Commercial Viability**: Assess market potential based on genre/audience combination
-- **Target Market**: Define primary and secondary reader demographics  
-- **Competitive Positioning**: How this book fits in the current market
-- **Unique Value Proposition**: What makes this book distinctive
-- **Publishing Path**: Traditional, self-publishing, or hybrid recommendation
+### Phase 2: Story Architecture Blueprint
+Transform template elements into concrete story structure including core premise (logline, central question, core conflict), structural framework (act structure, key plot points with word count targets, character arc milestones, pacing strategy), and chapter architecture (estimated chapter count, average chapter length, chapter function matrix).
 
-## Phase 2: Story Architecture Blueprint
+### Phase 3: Character Development System
+Create detailed character development guidelines including protagonist blueprint (core personality traits, character arc framework, voice and dialogue style, internal conflict engine), supporting character ecosystem (antagonist profile, ally/mentor roles, character relationship web), and narrative voice strategy (POV implementation, narrative distance, voice consistency guidelines).
 
-Transform template elements into concrete story structure:
+### Phase 4: World-Building & Research Framework
+Develop setting and research strategy including setting development (world type implementation, technology integration, cultural and social systems, sensory world-building), research action plan (primary research areas, research timeline, fact-checking systems, expert consultation needs), and consistency management (world bible creation, setting detail database).
 
-### Core Premise
-- **Logline**: One-sentence story summary
-- **Central Question**: The main dramatic question driving the narrative
-- **Core Conflict**: Primary tension based on conflict type
+### Phase 5: Writing Process Blueprint
+Create detailed writing execution plan including pre-writing phase (detailed outline creation, character profiles completion, world-building documentation, research completion), drafting phase (daily writing targets, weekly milestones, chapter writing order, draft quality expectations), revision strategy (macro revision, micro revision, line editing, final polish), and quality control checkpoints (25%, 50%, 75%, completion reviews).
 
-### Structural Framework  
-- **Act Structure**: Break down based on specified structure type
-- **Key Plot Points**: Major story beats with approximate word count targets
-- **Character Arc Milestones**: Protagonist development stages
-- **Pacing Strategy**: How to maintain the specified pace throughout
+### Phase 6: Style & Tone Implementation Guide
+Provide specific guidance for maintaining consistency including writing style execution (sentence structure patterns, vocabulary guidelines, paragraph construction, dialogue implementation), tone maintenance system (emotional baseline, tonal shifts, genre conventions, audience alignment), and quality assurance checklist (style consistency markers, tone verification points, voice authentication).
 
-### Chapter Architecture
-- **Estimated Chapter Count**: Based on target length and pacing
-- **Average Chapter Length**: Word count per chapter
-- **Chapter Function Matrix**: Plot advancement vs. character development balance
+### Phase 7: Marketing & Publishing Preparation
+Prepare for market entry including market positioning (genre classification, comp title analysis, target reader profile, marketing hooks), publishing readiness (manuscript requirements, query letter elements, self-publishing checklist, beta reader strategy), and launch strategy framework (pre-launch timeline, launch week tactics, post-launch growth).
 
-## Phase 3: Character Development System
-
-Create detailed character development guidelines:
-
-### Protagonist Blueprint
-- **Core Personality Traits**: Based on personality type from template
-- **Character Arc Framework**: Beginning → Middle → End transformation
-- **Voice and Dialogue Style**: Aligned with writing style and POV
-- **Internal Conflict Engine**: Psychological drivers
-
-### Supporting Character Ecosystem
-- **Antagonist Profile**: Based on conflict type
-- **Ally/Mentor Roles**: Supporting character functions
-- **Character Relationship Web**: How characters interact and influence each other
-
-### Narrative Voice Strategy
-- **POV Implementation**: Specific techniques for chosen POV
-- **Narrative Distance**: Intimacy level with characters
-- **Voice Consistency Guidelines**: Maintaining style throughout
-
-## Phase 4: World-Building & Research Framework
-
-Develop setting and research strategy:
-
-### Setting Development
-- **World Type Implementation**: Specific to chosen world type
-- **Technology Integration**: How the specified era influences the story
-- **Cultural and Social Systems**: Based on research requirements
-- **Sensory World-Building**: Engaging the five senses
-
-### Research Action Plan
-- **Primary Research Areas**: Based on research requirements in template
-- **Research Timeline**: When to research during writing process
-- **Fact-Checking Systems**: Maintaining accuracy
-- **Expert Consultation Needs**: If applicable
-
-### Consistency Management
-- **World Bible Creation**: Key elements to track
-- **Setting Detail Database**: Organized information storage
-
-## Phase 5: Writing Process Blueprint
-
-Create detailed writing execution plan:
-
-### Pre-Writing Phase (Weeks 1-2)
-- **Detailed Outline Creation**: Chapter-by-chapter breakdown
-- **Character Profiles Completion**: All major characters
-- **World-Building Documentation**: Setting bible
-- **Research Completion**: All necessary background work
-
-### Drafting Phase (Weeks 3-X)
-- **Daily Writing Targets**: Based on total length and timeline
-- **Weekly Milestones**: Progress checkpoints
-- **Chapter Writing Order**: Linear vs. non-linear approach
-- **Draft Quality Expectations**: First draft standards
-
-### Revision Strategy (Weeks X+1 to X+Y)
-- **Macro Revision**: Story structure and character arcs
-- **Micro Revision**: Scene-level improvements
-- **Line Editing**: Prose quality and style consistency
-- **Final Polish**: Grammar, formatting, final touches
-
-### Quality Control Checkpoints
-- **25% Review**: Quarter-point assessment
-- **50% Review**: Midpoint structural check
-- **75% Review**: Three-quarter momentum evaluation
-- **Completion Review**: Full draft assessment
-
-## Phase 6: Style & Tone Implementation Guide
-
-Provide specific guidance for maintaining consistency:
-
-### Writing Style Execution
-- **Sentence Structure Patterns**: Based on specified style
-- **Vocabulary Guidelines**: Appropriate word choices for audience
-- **Paragraph Construction**: Pacing and flow techniques
-- **Dialogue Implementation**: Character voice differentiation
-
-### Tone Maintenance System
-- **Emotional Baseline**: Consistent mood throughout
-- **Tonal Shifts**: When and how to vary tone
-- **Genre Conventions**: Meeting reader expectations
-- **Audience Alignment**: Age-appropriate content and complexity
-
-### Quality Assurance Checklist
-- **Style Consistency Markers**: What to check during revision
-- **Tone Verification Points**: Ensuring emotional coherence
-- **Voice Authentication**: Maintaining narrative authenticity
-
-## Phase 7: Marketing & Publishing Preparation
-
-Prepare for the book's market entry:
-
-### Market Positioning
-- **Genre Classification**: Precise category placement
-- **Comp Title Analysis**: Similar successful books
-- **Target Reader Profile**: Detailed audience description
-- **Marketing Hooks**: Key selling points
-
-### Publishing Readiness
-- **Manuscript Requirements**: Format and length specifications
-- **Query Letter Elements**: For traditional publishing
-- **Self-Publishing Checklist**: If going independent route
-- **Beta Reader Strategy**: Getting feedback before publication
-
-### Launch Strategy Framework
-- **Pre-Launch Timeline**: 6 months before publication
-- **Launch Week Tactics**: Release coordination
-- **Post-Launch Growth**: Building readership"""
+Remember: Populate ALL fields in the JSON schema with meaningful, specific content based on the template data. Ensure recommendations are commercially viable and practically implementable.
+"""
 
     @classmethod
     def generate_prompt(cls, book_model: BookModelType) -> str:
@@ -199,23 +88,61 @@ Prepare for the book's market entry:
         # Construct the complete prompt
         complete_prompt = f"""{cls.SYSTEM_PROMPT}
 
+## JSON Output Schema
+
+# ABSOLUTE RULES:
+- ❗ Output MUST be valid JSON that conforms to the structure below
+- ❗ Do NOT include any explanation, comment, or markdown
+- ❗ Populate **every field** in the schema with SPECIFIC, USEFUL data
+
+# Output Format Requirements:
+- 🔹 Pure JSON object
+- 🔹 All fields filled
+- 🔹 NO markdown/code blocks
+- 🔹 NO extra commentary
+
+# DO NOT DO:
+- ❌ Do not preface with “Here’s your JSON:”
+- ❌ Do not wrap output in triple backticks
+- ❌ Do not include schema again
+- ❌ Do not repeat the template data
+
+
+🛑 Your ONLY job is to produce a JSON object.
+🚫 Do NOT interpret. Do NOT reformat. Do NOT include text, commentary, or labels.
+✅ Your JSON MUST match the structure and field names EXACTLY.
+
+🔍 Common Mistakes to Avoid:
+- Using `phase1` instead of `phase_1`
+- Skipping the `"blueprint"` root node
+- Returning `"target_audience"` as a string instead of a nested object
+
+You MUST respond with a JSON object that follows this exact structure:
+
+```json
+{TARGET_JSON_SCHEMA}
+```
+## Here is a correct example output:
+```json
+{EXPECTED_OUTPUT}
+```
 ## Book Template Summary
 
 {template_summary}
 
 ## Blueprint Generation Task
 
-Based on the book template data provided below, create a comprehensive book writing blueprint following the seven-phase framework. Ensure every recommendation is tailored to the specific elements in this template.
-
-{cls.BLUEPRINT_FRAMEWORK}
+{cls.BLUEPRINT_INSTRUCTIONS}
 
 ## Book Template Data
 
-```json
-{template_json}
-```
 
-Generate the complete book writing blueprint now, addressing each phase systematically and providing specific, actionable guidance based on this template's unique characteristics."""
+{template_json}
+
+
+Generate the complete book writing blueprint now as a valid JSON object, addressing each phase systematically and providing specific, actionable guidance based on this template's unique characteristics. Return ONLY the JSON object with no additional text or formatting.
+
+"""
 
         return complete_prompt
     
@@ -282,8 +209,8 @@ Generate the complete book writing blueprint now, addressing each phase systemat
             "estimated_tokens": len(prompt.split()) * 1.3,  # Rough estimate
             "template_complexity_score": cls._calculate_complexity_score(book_model),
             "recommended_model_settings": {
-                "temperature": 0.7,
-                "max_tokens": 3000,
+                "temperature": 0.3,  # Lower temperature for JSON consistency
+                "max_tokens": 4000,  # Higher for JSON output
                 "top_p": 0.9
             }
         }
@@ -343,16 +270,54 @@ Generate the complete book writing blueprint now, addressing each phase systemat
                 return int(numbers[0].replace(',', ''))
             return 60000  # Default
 
+    @classmethod
+    def validate_json_response(cls, response: str) -> tuple[bool, Dict[str, Any] | str]:
+        """
+        Validate that the LLM response is valid JSON matching our schema.
+        
+        Args:
+            response: The LLM response string
+            
+        Returns:
+            Tuple of (is_valid, parsed_json_or_error_message)
+        """
+        try:
+            # Try to parse the JSON
+            parsed_json = json.loads(response.strip())
+            
+            # Basic structure validation
+            required_keys = ["title", "author", "blueprint"]
+            blueprint_phases = ["phase_1", "phase_2", "phase_3", "phase_4", "phase_5", "phase_6", "phase_7"]
+            
+            # Check top-level structure
+            for key in required_keys:
+                if key not in parsed_json:
+                    return False, f"Missing required key: {key}"
+            
+            # Check blueprint phases
+            if "blueprint" in parsed_json:
+                for phase in blueprint_phases:
+                    if phase not in parsed_json["blueprint"]:
+                        return False, f"Missing blueprint phase: {phase}"
+            
+            return True, parsed_json
+            
+        except json.JSONDecodeError as e:
+            return False, f"Invalid JSON: {str(e)}"
+        except Exception as e:
+            return False, f"Validation error: {str(e)}"
+
 
 def main():
     """Example usage of the BlueprintPromptGenerator."""
     import argparse
     from pathlib import Path
     
-    parser = argparse.ArgumentParser(description="Generate book writing blueprint prompts")
+    parser = argparse.ArgumentParser(description="Generate book writing blueprint prompts with JSON output")
     parser.add_argument('--template', '-t', required=True, help='Template name to load')
     parser.add_argument('--output', '-o', help='Output file for the prompt')
     parser.add_argument('--stats', action='store_true', help='Show prompt statistics')
+    parser.add_argument('--validate', action='store_true', help='Validate JSON schema')
     
     args = parser.parse_args()
     
@@ -385,6 +350,13 @@ def main():
                         print(f"  {sub_key}: {sub_value}")
                 else:
                     print(f"{key}: {value}")
+        
+        if args.validate:
+            print("\n" + "="*50)
+            print("JSON SCHEMA VALIDATION")
+            print("="*50)
+            print("Schema structure looks valid ✓")
+            print("Use validate_json_response() method to validate LLM responses")
     
     except Exception as e:
         print(f"Error: {e}")
