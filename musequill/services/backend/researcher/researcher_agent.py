@@ -12,6 +12,7 @@ Key Features:
 - Content deduplication and similarity filtering
 - Source quality assessment and domain filtering
 - Comprehensive error handling and monitoring
+- Ollama embeddings integration for local embeddings generation
 """
 
 import asyncio
@@ -24,58 +25,33 @@ from urllib.parse import urlparse
 from uuid import uuid4
 from dataclasses import dataclass
 import traceback
-
+import logging
+from hashlib import sha256
 import chromadb
 from chromadb.config import Settings
-from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_ollama import OllamaEmbeddings  # Changed from OpenAI to Ollama
 from tavily import TavilyClient
 from difflib import SequenceMatcher
+if __name__ == '__main__':
+    import sys
+    from pathlib import Path
+    project_root = Path(__name__).parent.parent.parent.parent.parent.parent
+    sys.path.insert(0, str(project_root))
+    current_path = Path(__name__).parent
+    sys.path.insert(1, str(current_path))
 
-from musequill.config.logging import get_logger
-from musequill.agents.researcher.researcher_agent_config import ResearcherConfig
-from musequill.agents.agent_state import BookWritingState, ResearchQuery
-
-logger = get_logger(__name__)
-
-
-@dataclass
-class SearchResult:
-    """Structured search result from Tavily."""
-    url: str
-    title: str
-    content: str
-    raw_content: str
-    score: float
-    published_date: Optional[str]
-    domain: str
-    query: str
-    tavily_answer: Optional[str] = None
+from musequill.services.backend.researcher import (
+    ResearcherConfig,
+    ResearchQuery,
+    QueryStatus,
+    ResearchResults,
+    SearchResult,
+    ProcessedChunk
+)
 
 
-@dataclass
-class ProcessedChunk:
-    """Processed content chunk ready for vector storage."""
-    chunk_id: str
-    content: str
-    embedding: List[float]
-    metadata: Dict[str, Any]
-    quality_score: float
-    source_info: Dict[str, str]
-
-
-@dataclass
-class ResearchResults:
-    """Complete research results for a query."""
-    query: str
-    search_results: List[SearchResult]
-    processed_chunks: List[ProcessedChunk]
-    total_chunks_stored: int
-    total_sources: int
-    quality_stats: Dict[str, Any]
-    execution_time: float
-    status: str
-    error_message: Optional[str] = None
+logger = logging.getLogger(__name__)
 
 
 class ResearcherAgent:
@@ -93,7 +69,7 @@ class ResearcherAgent:
         self.tavily_client: Optional[TavilyClient] = None
         self.chroma_client: Optional[chromadb.HttpClient] = None
         self.chroma_collection = None
-        self.embeddings: Optional[OpenAIEmbeddings] = None
+        self.embeddings: Optional[OllamaEmbeddings] = None  # Changed type annotation
         self.text_splitter: Optional[RecursiveCharacterTextSplitter] = None
         
         # Content tracking for deduplication
@@ -113,7 +89,7 @@ class ResearcherAgent:
         
         self._initialize_components()
         
-        logger.info("Researcher Agent initialized")
+        logger.info("Researcher Agent initialized with Ollama embeddings")
     
     def _initialize_components(self) -> None:
         """Initialize all required components."""
@@ -154,28 +130,23 @@ class ResearcherAgent:
                 )
                 logger.info(f"Created new Chroma collection: {self.config.chroma_collection_name}")
             
-            # Initialize OpenAI embeddings
-            # For text-embedding-3-small and text-embedding-3-large, only set dimensions if different from default
-            embedding_kwargs = {
-                "api_key": self.config.openai_api_key,
-                "model": self.config.embedding_model
-            }
+            # Initialize Ollama embeddings
+            # Get base URL and model from config, with sensible defaults
+            ollama_base_url = getattr(self.config, 'ollama_base_url', 'http://localhost:11434')
+            embedding_model = getattr(self.config, 'embedding_model', 'nomic-embed-text')
             
-            # Only add dimensions parameter if it's different from the model's default
-            if (self.config.embedding_model == "text-embedding-3-small" and 
-                self.config.embedding_dimensions != 1536):
-                embedding_kwargs["dimensions"] = self.config.embedding_dimensions
-            elif (self.config.embedding_model == "text-embedding-3-large" and 
-                  self.config.embedding_dimensions != 3072):
-                embedding_kwargs["dimensions"] = self.config.embedding_dimensions
-            elif self.config.embedding_model == "text-embedding-ada-002":
-                # text-embedding-ada-002 has fixed dimensions of 1536 and doesn't support custom dimensions
-                pass
-            else:
-                # For other models, include dimensions parameter
-                embedding_kwargs["dimensions"] = self.config.embedding_dimensions
+            # Validate that we're using a supported embedding model
+            supported_models = ['nomic-embed-text', 'mxbai-embed-large', 'all-minilm']
+            if embedding_model not in supported_models:
+                logger.warning(f"Model {embedding_model} not in recommended list. Using nomic-embed-text instead.")
+                embedding_model = 'nomic-embed-text'
             
-            self.embeddings = OpenAIEmbeddings(**embedding_kwargs)
+            self.embeddings = OllamaEmbeddings(
+                model=embedding_model,
+                base_url=ollama_base_url
+            )
+            
+            logger.info(f"Ollama embeddings initialized with model: {embedding_model} at {ollama_base_url}")
             
             # Initialize text splitter
             self.text_splitter = RecursiveCharacterTextSplitter(
@@ -190,42 +161,44 @@ class ResearcherAgent:
             logger.error(f"Failed to initialize components: {e}")
             raise
     
-    def execute_research(self, state: BookWritingState) -> Dict[str, Any]:
+    def execute_research(self, research_id:str, queries: List[ResearchQuery]) -> Dict[str, Any]:
         """
         Execute research for all pending queries in the state.
         
         Args:
-            state: BookWritingState containing research queries
+            research_id: str - a unique id to associate the query results with
+            queries: containing a list of research queries
             
         Returns:
             Dictionary with research results and updated state information
         """
         try:
-            logger.info(f"Starting research execution for book {state['book_id']}")
+            logger.info(f"Starting research execution for book {research_id}")
             self.stats['processing_start_time'] = time.time()
             
             # Filter pending queries
-            pending_queries = [q for q in state['research_queries'] if q['status'] == 'pending']
+            pending_queries = [q for q in queries if q.query_type.is_pending()]
             
             if not pending_queries:
-                logger.warning(f"No pending research queries found for book {state['book_id']}")
+                logger.warning(f"No pending research queries found for book {research_id}")
                 return {
-                    'updated_queries': state['research_queries'],
+                    'updated_queries': queries,
                     'total_chunks': 0,
                     'total_sources': 0,
                     'stats': self.stats,
-                    'chroma_storage_info': self._get_chroma_storage_info(state['book_id'])
+                    'chroma_storage_info': self._get_chroma_storage_info(research_id)
                 }
+            
             len_pending_queries = len(pending_queries)
             pending_queries_idx = len_pending_queries if len_pending_queries < self.config.max_research_queries else self.config.max_research_queries
             pending_queries = pending_queries[:pending_queries_idx]
             logger.info(f"Processing {len(pending_queries)} research queries")
             
             # Execute research queries with concurrency control
-            research_results = self._execute_queries_concurrently(pending_queries, state['book_id'])
+            research_results = self._execute_queries_concurrently(pending_queries, research_id)
             
             # Update query statuses
-            updated_queries = self._update_query_statuses(state['research_queries'], research_results)
+            updated_queries = self._update_query_statuses(queries, research_results)
             
             # Calculate totals
             total_chunks = sum(result.total_chunks_stored for result in research_results.values())
@@ -238,10 +211,10 @@ class ResearcherAgent:
             execution_time = time.time() - self.stats['processing_start_time']
             
             # Prepare ChromaDB storage information for state
-            chroma_storage_info = self._get_chroma_storage_info(state['book_id'])
+            chroma_storage_info = self._get_chroma_storage_info(research_id)
             
             logger.info(
-                f"Research execution completed for book {state['book_id']}: "
+                f"Research execution completed for book {research_id}: "
                 f"{total_chunks} chunks stored, {total_sources} sources processed, "
                 f"execution time: {execution_time:.2f}s"
             )
@@ -257,27 +230,53 @@ class ResearcherAgent:
             }
             
         except Exception as e:
-            logger.error(f"Error executing research for book {state['book_id']}: {e}")
+            logger.error(f"Error executing research for book {research_id}: {e}")
             logger.error(traceback.format_exc())
             self.stats['queries_failed'] += len(pending_queries)
             
             # Return failure result with ChromaDB storage info
             return {
-                'updated_queries': self._mark_queries_failed(state['research_queries'], str(e)),
+                'updated_queries': self._mark_queries_failed(queries, str(e)),
                 'total_chunks': 0,
                 'total_sources': 0,
                 'error': str(e),
                 'stats': self.stats,
-                'chroma_storage_info': self._get_chroma_storage_info(state['book_id'])
+                'chroma_storage_info': self._get_chroma_storage_info(research_id)
             }
-    
-    def _execute_queries_concurrently(self, queries: List[ResearchQuery], book_id: str) -> Dict[str, ResearchResults]:
+
+    def _sort_research_queries_by_priority(self, research_queries:List[ResearchQuery]) -> List[ResearchQuery]:
+        """
+        Sort ResearchQuery list by priority: High -> Medium -> Low
+        
+        Args:
+            research_queries: List of ResearchQuery objects
+            
+        Returns:
+            List of ResearchQuery objects sorted by priority
+        """
+        # Define priority order mapping
+        priority_order = {
+            'High': 1,
+            'Medium': 2, 
+            'Low': 3
+        }
+        
+        # Sort using the priority mapping
+        sorted_queries = sorted(
+            research_queries, 
+            key=lambda query: priority_order.get(query.priority, 4)  # Default to 4 for unknown priorities
+        )
+        
+        return sorted_queries
+
+
+    def _execute_queries_concurrently(self, queries: List[ResearchQuery], research_id: str) -> Dict[str, ResearchResults]:
         """
         Execute research queries with controlled concurrency.
         
         Args:
             queries: List of research queries to execute
-            book_id: Book identifier for metadata
+            research_id: Research identifier for metadata
             
         Returns:
             Dictionary mapping query text to ResearchResults
@@ -287,13 +286,15 @@ class ResearcherAgent:
         # Process queries in batches to respect concurrency limits
         batch_size = self.config.max_concurrent_queries
         
+        queries = self._sort_research_queries_by_priority(queries)
+
         for i in range(0, len(queries), batch_size):
             batch = queries[i:i + batch_size]
             
             logger.info(f"Processing batch {i//batch_size + 1} with {len(batch)} queries")
             
             # Execute batch concurrently
-            batch_results = asyncio.run(self._execute_query_batch(batch, book_id))
+            batch_results = asyncio.run(self._execute_query_batch(batch, research_id))
             results.update(batch_results)
             
             # Rate limiting between batches
@@ -302,13 +303,13 @@ class ResearcherAgent:
         
         return results
     
-    async def _execute_query_batch(self, queries: List[ResearchQuery], book_id: str) -> Dict[str, ResearchResults]:
+    async def _execute_query_batch(self, queries: List[ResearchQuery], research_id: str) -> Dict[str, ResearchResults]:
         """Execute a batch of queries concurrently."""
         tasks = []
         
         for query in queries:
             task = asyncio.create_task(
-                self._research_single_query(query, book_id)
+                self._research_single_query(query, research_id)
             )
             tasks.append(task)
         
@@ -319,9 +320,9 @@ class ResearcherAgent:
         batch_results = {}
         for query, result in zip(queries, results):
             if isinstance(result, Exception):
-                logger.error(f"Query '{query['query']}' failed: {result}")
-                batch_results[query['query']] = ResearchResults(
-                    query=query['query'],
+                logger.error(f"Query '{query.category}' failed: {result}")
+                batch_results[query.category] = ResearchResults(
+                    query=query.category,
                     search_results=[],
                     processed_chunks=[],
                     total_chunks_stored=0,
@@ -333,40 +334,41 @@ class ResearcherAgent:
                 )
                 self.stats['queries_failed'] += 1
             else:
-                batch_results[query['query']] = result
+                batch_results[query.category] = result
                 self.stats['queries_processed'] += 1
         
         return batch_results
     
-    async def _research_single_query(self, query: ResearchQuery, book_id: str) -> ResearchResults:
+    async def _research_single_query(self, query: ResearchQuery, research_id: str) -> ResearchResults:
         """
         Research a single query with retries.
         
         Args:
             query: Research query to execute
-            book_id: Book identifier
+            research_id: Research identifier
             
         Returns:
             ResearchResults for the query
         """
         start_time = time.time()
         last_error = None
+        research_query:str = query.get_query()
         
         for attempt in range(self.config.query_retry_attempts):
             try:
-                logger.info(f"Executing query '{query['query']}' (attempt {attempt + 1})")
+                logger.info(f"Executing query [{research_query}] (attempt {attempt + 1})")
                 
                 # Perform web search
-                search_results = await self._perform_web_search(query['query'])
+                search_results = await self._perform_web_search(research_query)
                 
                 # Filter and validate results
-                filtered_results = self._filter_search_results(search_results, query)
+                filtered_results = self._filter_search_results(search_results)
                 
                 # Process content and create chunks
-                processed_chunks = await self._process_search_results(filtered_results, query, book_id)
+                processed_chunks = await self._process_search_results(filtered_results, query, research_id)
                 
                 # Store chunks in vector database
-                chunks_stored = await self._store_chunks_in_chroma(processed_chunks, book_id)
+                chunks_stored = await self._store_chunks_in_chroma(processed_chunks, research_id)
                 
                 # Calculate quality statistics
                 quality_stats = self._calculate_quality_stats(processed_chunks)
@@ -400,10 +402,10 @@ class ResearcherAgent:
         
         # All attempts failed
         execution_time = time.time() - start_time
-        logger.error(f"Query '{query['query']}' failed after {self.config.query_retry_attempts} attempts")
+        logger.error(f"Query [{research_query}]' failed after {self.config.query_retry_attempts} attempts")
         
         return ResearchResults(
-            query=query['query'],
+            query=research_query,
             search_results=[],
             processed_chunks=[],
             total_chunks_stored=0,
@@ -466,7 +468,7 @@ class ResearcherAgent:
             logger.error(f"Web search failed for query '{query}': {e}")
             raise
     
-    def _filter_search_results(self, results: List[SearchResult], query: ResearchQuery) -> List[SearchResult]:
+    def _filter_search_results(self, results: List[SearchResult]) -> List[SearchResult]:
         """
         Filter search results based on quality criteria.
         
@@ -575,10 +577,10 @@ class ResearcherAgent:
         return quality_score >= self.config.min_content_quality_score
     
     async def _process_search_results(
-        self, 
-        results: List[SearchResult], 
-        query: ResearchQuery, 
-        book_id: str
+        self,
+        results: List[SearchResult],
+        query: ResearchQuery,
+        research_id: str
     ) -> List[ProcessedChunk]:
         """
         Process search results into chunks with embeddings.
@@ -586,7 +588,7 @@ class ResearcherAgent:
         Args:
             results: Filtered search results
             query: Original research query
-            book_id: Book identifier
+            research_id: Research identifier
             
         Returns:
             List of ProcessedChunk objects
@@ -619,19 +621,20 @@ class ResearcherAgent:
                             continue
                         self.content_hashes.add(content_hash)
                     
-                    # Generate embedding
+                    # Generate embedding using Ollama
                     embedding = await self.embeddings.aembed_query(chunk_text)
                     
                     # Create unique chunk ID
-                    chunk_id = f"{book_id}_{query['query_type']}_{uuid4().hex[:12]}"
+                    category_hash = sha256(query.category.encode()).hexdigest()
+                    chunk_id = f"{research_id}_{category_hash}_{uuid4().hex[:12]}"
                     
                     # Create comprehensive metadata
                     # ChromaDB metadata must be strings, numbers, or booleans - no None values
                     metadata = {
-                        'book_id': str(book_id),
-                        'query': str(query['query']),
-                        'query_type': str(query['query_type']),
-                        'query_priority': int(query['priority']),
+                        'research_id': str(research_id),
+                        'query': query.get_query(),
+                        'query_type': str(query.query_type),
+                        'query_priority': str(query.priority),
                         'source_url': str(result.url),
                         'source_title': str(result.title),
                         'source_domain': str(result.domain),
@@ -641,7 +644,8 @@ class ResearcherAgent:
                         'published_date': str(result.published_date) if result.published_date is not None else "",
                         'processed_at': str(datetime.now(timezone.utc).isoformat()),
                         'tavily_answer': str(result.tavily_answer[:500]) if result.tavily_answer else "",
-                        'total_chunks_from_source': int(len(text_chunks))
+                        'total_chunks_from_source': int(len(text_chunks)),
+                        'embedding_model': str(self.embeddings.model)  # Track which model was used
                     }
                     
                     # Calculate quality score for this chunk
@@ -672,7 +676,7 @@ class ResearcherAgent:
                 logger.error(f"Error processing result from {result.url}: {e}")
                 continue
         
-        logger.info(f"Processed {len(processed_chunks)} chunks from {len(results)} search results")
+        logger.info(f"Processed {len(processed_chunks)} chunks from {len(results)} search results using Ollama embeddings")
         return processed_chunks
     
     def _get_content_hash(self, content: str) -> str:
@@ -710,7 +714,7 @@ class ResearcherAgent:
             score += 0.1
         
         # Query relevance (simple keyword matching)
-        query_words = set(query['query'].lower().split())
+        query_words = set(query.get_query().lower().split())
         chunk_words = set(chunk_text.lower().split())
         relevance = len(query_words.intersection(chunk_words)) / len(query_words) if query_words else 0
         score += relevance * 0.2
@@ -726,13 +730,13 @@ class ResearcherAgent:
         
         return min(1.0, score)  # Cap at 1.0
     
-    async def _store_chunks_in_chroma(self, chunks: List[ProcessedChunk], book_id: str) -> int:
+    async def _store_chunks_in_chroma(self, chunks: List[ProcessedChunk], research_id: str) -> int:
         """
         Store processed chunks in Chroma vector database.
         
         Args:
             chunks: List of processed chunks to store
-            book_id: Book identifier
+            research_id: Research identifier
             
         Returns:
             Number of chunks successfully stored
@@ -756,10 +760,10 @@ class ResearcherAgent:
                     embeddings = [chunk.embedding for chunk in batch]
                     metadatas = [chunk.metadata for chunk in batch]
                     
-                    # Log the book_id being stored for debugging
+                    # Log the research_id being stored for debugging
                     if metadatas:
-                        sample_book_ids = set(m.get('book_id') for m in metadatas[:3])
-                        logger.info(f"Storing batch with book_ids: {list(sample_book_ids)} (types: {[type(bid) for bid in sample_book_ids]})")
+                        sample_research_ids = set(m.get('research_id') for m in metadatas[:3])
+                        logger.info(f"Storing batch with research_ids: {list(sample_research_ids)} (types: {[type(bid) for bid in sample_research_ids]})")
                     
                     # Store batch in Chroma
                     self.chroma_collection.add(
@@ -782,9 +786,9 @@ class ResearcherAgent:
                     # Continue with next batch rather than failing completely
                     continue
             if stored_count > 0:
-                logger.info(f"Stored {stored_count} chunks in Chroma for book {book_id}")
+                logger.info(f"Stored {stored_count} chunks in Chroma for book {research_id}")
             else:
-                logger.warning(f"Did not store any chunks in Chroma for book {book_id}")
+                logger.warning(f"Did not store any chunks in Chroma for book {research_id}")
             return stored_count
             
         except Exception as e:
@@ -824,8 +828,8 @@ class ResearcherAgent:
         }
     
     def _update_query_statuses(
-        self, 
-        original_queries: List[ResearchQuery], 
+        self,
+        original_queries: List[ResearchQuery],
         results: Dict[str, ResearchResults]
     ) -> List[ResearchQuery]:
         """Update query statuses based on research results."""
@@ -834,8 +838,8 @@ class ResearcherAgent:
         for query in original_queries:
             updated_query = query.copy()
             
-            if query['query'] in results:
-                result = results[query['query']]
+            if query.get_query() in results:
+                result = results[query.get_query()]
                 updated_query['status'] = result.status
                 updated_query['results_count'] = result.total_chunks_stored
                 
@@ -857,8 +861,8 @@ class ResearcherAgent:
         
         for query in queries:
             updated_query = query.copy()
-            if updated_query['status'] == 'pending':
-                updated_query['status'] = 'failed'
+            if updated_query.query_type.is_pending():
+                updated_query.query_type = QueryStatus.FAILED
                 updated_query['error_message'] = error_message
                 updated_query['results_count'] = 0
             updated_queries.append(updated_query)
@@ -866,9 +870,9 @@ class ResearcherAgent:
         return updated_queries
     
     def search_similar_content(
-        self, 
-        query_text: str, 
-        book_id: str, 
+        self,
+        query_text: str,
+        research_id: str,
         limit: int = 10,
         similarity_threshold: float = 0.7
     ) -> List[Dict[str, Any]]:
@@ -877,7 +881,7 @@ class ResearcherAgent:
         
         Args:
             query_text: Text to search for
-            book_id: Book identifier to filter by
+            research_id: Research identifier to filter by
             limit: Maximum number of results
             similarity_threshold: Minimum similarity score
             
@@ -885,14 +889,14 @@ class ResearcherAgent:
             List of similar content chunks with metadata
         """
         try:
-            # Generate embedding for query
+            # Generate embedding for query using Ollama
             query_embedding = self.embeddings.embed_query(query_text)
             
             # Search in Chroma
             results = self.chroma_collection.query(
                 query_embeddings=[query_embedding],
                 n_results=limit,
-                where={"book_id": book_id},
+                where={"research_id": research_id},
                 include=["documents", "metadatas", "distances"]
             )
             
@@ -916,19 +920,19 @@ class ResearcherAgent:
                             'rank': i + 1
                         })
             
-            logger.info(f"Found {len(similar_chunks)} similar chunks for query '{query_text}'")
+            logger.info(f"Found {len(similar_chunks)} similar chunks for query '{query_text}' using Ollama embeddings")
             return similar_chunks
             
         except Exception as e:
             logger.error(f"Error searching similar content: {e}")
             return []
     
-    def get_research_summary(self, book_id: str) -> Dict[str, Any]:
+    def get_research_summary(self, research_id: str) -> Dict[str, Any]:
         """
         Get comprehensive research summary for a book.
         
         Args:
-            book_id: Book identifier
+            research_id: Research identifier
             
         Returns:
             Research summary with statistics and metadata
@@ -936,13 +940,13 @@ class ResearcherAgent:
         try:
             # Query all chunks for this book
             results = self.chroma_collection.get(
-                where={"book_id": book_id},
+                where={"research_id": research_id},
                 include=["metadatas"]
             )
             
             if not results['metadatas']:
                 return {
-                    'book_id': book_id,
+                    'research_id': research_id,
                     'total_chunks': 0,
                     'error': 'No research data found'
                 }
@@ -973,8 +977,11 @@ class ResearcherAgent:
             earliest = min(processed_times) if processed_times else None
             latest = max(processed_times) if processed_times else None
             
+            # Embedding model info
+            embedding_models = set(m.get('embedding_model', 'unknown') for m in metadatas)
+            
             summary = {
-                'book_id': book_id,
+                'research_id': research_id,
                 'total_chunks': total_chunks,
                 'unique_sources': unique_sources,
                 'unique_domains': unique_domains,
@@ -984,25 +991,26 @@ class ResearcherAgent:
                     'earliest': earliest,
                     'latest': latest
                 },
-                'avg_chunk_size': sum(m.get('chunk_size', 0) for m in metadatas) / total_chunks if total_chunks else 0
+                'avg_chunk_size': sum(m.get('chunk_size', 0) for m in metadatas) / total_chunks if total_chunks else 0,
+                'embedding_models_used': list(embedding_models)
             }
             
-            logger.info(f"Generated research summary for book {book_id}: {total_chunks} chunks from {unique_sources} sources")
+            logger.info(f"Generated research summary for book {research_id}: {total_chunks} chunks from {unique_sources} sources")
             return summary
             
         except Exception as e:
-            logger.error(f"Error generating research summary for book {book_id}: {e}")
+            logger.error(f"Error generating research summary for book {research_id}: {e}")
             return {
-                'book_id': book_id,
+                'research_id': research_id,
                 'error': str(e)
             }
     
-    def cleanup_book_research(self, book_id: str) -> bool:
+    def cleanup_book_research(self, research_id: str) -> bool:
         """
         Clean up research data for a specific book.
         
         Args:
-            book_id: Book identifier
+            research_id: Research identifier
             
         Returns:
             True if cleanup successful, False otherwise
@@ -1010,7 +1018,7 @@ class ResearcherAgent:
         try:
             # Get all chunk IDs for this book
             results = self.chroma_collection.get(
-                where={"book_id": book_id},
+                where={"research_id": research_id},
                 include=["metadatas"]
             )
             
@@ -1030,21 +1038,21 @@ class ResearcherAgent:
                     except Exception as e:
                         logger.error(f"Failed to delete batch of chunks: {e}")
                 
-                logger.info(f"Cleaned up {deleted_count} research chunks for book {book_id}")
+                logger.info(f"Cleaned up {deleted_count} research chunks for book {research_id}")
                 return deleted_count == len(chunk_ids)
             
             return True
             
         except Exception as e:
-            logger.error(f"Error cleaning up research for book {book_id}: {e}")
+            logger.error(f"Error cleaning up research for book {research_id}: {e}")
             return False
     
-    def _get_chroma_storage_info(self, book_id: str) -> Dict[str, Any]:
+    def _get_chroma_storage_info(self, research_id: str) -> Dict[str, Any]:
         """
         Get ChromaDB storage information for the book.
         
         Args:
-            book_id: Book identifier
+            research_id: Research identifier
             
         Returns:
             Dictionary with ChromaDB storage details
@@ -1054,37 +1062,41 @@ class ResearcherAgent:
             current_count = 0
             try:
                 results = self.chroma_collection.get(
-                    where={"book_id": book_id},
+                    where={"research_id": research_id},
                     include=["metadatas"]
                 )
                 current_count = len(results['ids']) if results['ids'] else 0
             except Exception as e:
-                logger.warning(f"Could not get current chunk count for book {book_id}: {e}")
+                logger.warning(f"Could not get current chunk count for book {research_id}: {e}")
             
             storage_info = {
                 'collection_name': self.config.chroma_collection_name,
                 'chroma_host': self.config.chroma_host,
                 'chroma_port': self.config.chroma_port,
-                'book_id': book_id,
+                'research_id': research_id,
                 'chunks_in_collection': current_count,
                 'last_updated': datetime.now(timezone.utc).isoformat(),
-                'storage_type': 'chromadb'
+                'storage_type': 'chromadb',
+                'embedding_model': getattr(self.config, 'embedding_model', 'nomic-embed-text'),
+                'ollama_base_url': getattr(self.config, 'ollama_base_url', 'http://localhost:11434')
             }
             
-            logger.debug(f"ChromaDB storage info for book {book_id}: {storage_info}")
+            logger.debug(f"ChromaDB storage info for book {research_id}: {storage_info}")
             return storage_info
             
         except Exception as e:
-            logger.error(f"Error getting ChromaDB storage info for book {book_id}: {e}")
+            logger.error(f"Error getting ChromaDB storage info for book {research_id}: {e}")
             # Return minimal storage info even if there's an error
             return {
                 'collection_name': self.config.chroma_collection_name,
                 'chroma_host': self.config.chroma_host,
                 'chroma_port': self.config.chroma_port,
-                'book_id': book_id,
+                'research_id': research_id,
                 'chunks_in_collection': 0,
                 'last_updated': datetime.now(timezone.utc).isoformat(),
                 'storage_type': 'chromadb',
+                'embedding_model': getattr(self.config, 'embedding_model', 'nomic-embed-text'),
+                'ollama_base_url': getattr(self.config, 'ollama_base_url', 'http://localhost:11434'),
                 'error': str(e)
             }
     
@@ -1102,113 +1114,30 @@ class ResearcherAgent:
         except:
             current_stats['total_chunks_in_collection'] = 'unavailable'
         
+        # Add embedding model info
+        current_stats['embedding_model'] = getattr(self.config, 'embedding_model', 'nomic-embed-text')
+        current_stats['ollama_base_url'] = getattr(self.config, 'ollama_base_url', 'http://localhost:11434')
+        
         return current_stats
-
+    
 
 def main():
-    """Test function for ResearcherAgent."""
-    from musequill.agents.agent_state import BookWritingState, ProcessingStage, ResearchQuery
-    from datetime import datetime, timezone
-    
-    print("Testing ResearcherAgent...")
-    
-    # Create test research queries
-    test_queries = [
-        ResearchQuery(
-            query="artificial intelligence machine learning basics",
-            priority=5,
-            query_type="technical_details",
-            status="pending",
-            results_count=None,
-            created_at=datetime.now(timezone.utc).isoformat()
-        ),
-        ResearchQuery(
-            query="AI ethics current debates 2024",
-            priority=4,
-            query_type="expert_opinions",
-            status="pending",
-            results_count=None,
-            created_at=datetime.now(timezone.utc).isoformat()
-        )
-    ]
-    
-    # Create test state
-    test_state = BookWritingState(
-        book_id="test_book_ai_research",
-        orchestration_id="test_orch_456",
-        thread_id="test_thread_789",
-        title="AI Research Test Book",
-        description="Testing research capabilities",
-        genre="Technology",
-        target_word_count=50000,
-        target_audience="Technology professionals",
-        author_preferences={},
-        outline={},
-        chapters=[],
-        current_stage=ProcessingStage.RESEARCHING,
-        processing_started_at=datetime.now(timezone.utc).isoformat(),
-        processing_updated_at=datetime.now(timezone.utc).isoformat(),
-        research_queries=test_queries,
-        research_strategy="Test research strategy",
-        total_research_chunks=0,
-        research_completed_at=None,
-        current_chapter=0,
-        writing_strategy=None,
-        writing_style_guide=None,
-        total_word_count=0,
-        writing_started_at=None,
-        writing_completed_at=None,
-        review_notes=None,
-        revision_count=0,
-        quality_score=None,
-        errors=[],
-        retry_count=0,
-        last_error_at=None,
-        progress_percentage=0.0,
-        estimated_completion_time=None,
-        final_book_content=None,
-        metadata={}
-    )
-    
-    try:
-        # Create researcher agent
-        researcher = ResearcherAgent()
-        
-        print("Executing research...")
-        research_results = researcher.execute_research(test_state)
-        
-        print(f"\nResearch Results:")
-        print(f"Total chunks stored: {research_results['total_chunks']}")
-        print(f"Total sources processed: {research_results['total_sources']}")
-        print(f"Execution time: {research_results.get('execution_time', 0):.2f}s")
-        
-        # Show updated query statuses
-        print(f"\nQuery Results:")
-        for query in research_results['updated_queries']:
-            print(f"- {query['query'][:50]}...")
-            print(f"  Status: {query['status']}, Results: {query.get('results_count', 0)}")
-        
-        # Get research summary
-        print(f"\nResearch Summary:")
-        summary = researcher.get_research_summary(test_state['book_id'])
-        print(f"Total chunks: {summary.get('total_chunks', 0)}")
-        print(f"Unique sources: {summary.get('unique_sources', 0)}")
-        print(f"Query types: {list(summary.get('query_type_distribution', {}).keys())}")
-        
-        # Get agent statistics
-        stats = researcher.get_stats()
-        print(f"\nAgent Statistics:")
-        print(f"Queries processed: {stats['queries_processed']}")
-        print(f"Queries failed: {stats['queries_failed']}")
-        print(f"Total chunks stored: {stats['total_chunks_stored']}")
-        
-        print("\nResearcherAgent test completed successfully!")
-        
-    except Exception as e:
-        print(f"Error during test: {e}")
-        import traceback
-        traceback.print_exc()
+    import json
+    from uuid import uuid4
+    from pathlib import Path
+    import sys
 
+    project_root = Path(__name__).parent.parent.parent.parent.parent.parent
+    sys.path.insert(0, str(project_root))
+    conf = ResearcherConfig()
+    agent = ResearcherAgent(conf)
+    with open('musequill/services/backend/outputs/research-20250731-231103.json', "r", encoding='utf-8') as f:
+        json_payload = f.read()
+        payload = json.loads(json_payload)
+        research_id = str(uuid4())
+        queries = ResearchQuery.load_research_queries(json_payload)
+        results = agent.execute_research(research_id, queries)
+        print(json.dumps(results))
 
 if __name__ == "__main__":
     main()

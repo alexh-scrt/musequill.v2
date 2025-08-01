@@ -71,35 +71,29 @@ class ResearcherConfig(BaseSettings):
         description="Chroma database name"
     )
     
-    # OpenAI Embeddings settings
-    openai_api_key: str = Field(
-        default="",
-        validation_alias="OPENAI_API_KEY",
-        description="OpenAI API key for embeddings"
+    # Ollama Embeddings settings (UPDATED SECTION)
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        validation_alias="OLLAMA_BASE_URL",
+        description="Ollama server base URL"
     )
     embedding_model: str = Field(
-        default="text-embedding-3-small",
+        default="nomic-embed-text",
         validation_alias="EMBEDDING_MODEL",
-        description="OpenAI embedding model"
+        description="Ollama embedding model (nomic-embed-text, mxbai-embed-large, all-minilm)"
     )
-    embedding_dimensions: int = Field(
-        default=1536,
-        validation_alias="EMBEDDING_DIMENSIONS",
-        description="Embedding vector dimensions",
-        ge=256,
-        le=3072
-    )
+    # Note: Removed openai_api_key and embedding_dimensions as they're not needed for Ollama
     
     # Text Processing settings
     chunk_size: int = Field(
-        default=1000,
+        default=800,  # Reduced from 1000 for better Ollama performance
         validation_alias="RESEARCH_CHUNK_SIZE",
         description="Text chunk size for embedding",
         ge=100,
         le=8000
     )
     chunk_overlap: int = Field(
-        default=200,
+        default=150,  # Reduced from 200 for better Ollama performance
         validation_alias="RESEARCH_CHUNK_OVERLAP",
         description="Overlap between text chunks",
         ge=0,
@@ -128,9 +122,9 @@ class ResearcherConfig(BaseSettings):
         le=20
     )
 
-    # Processing settings
+    # Processing settings (OPTIMIZED FOR OLLAMA)
     max_concurrent_queries: int = Field(
-        default=5,
+        default=2,  # Reduced from 5 for local Ollama processing
         validation_alias="MAX_CONCURRENT_RESEARCH_QUERIES",
         description="Maximum concurrent research queries",
         ge=1,
@@ -151,7 +145,7 @@ class ResearcherConfig(BaseSettings):
         le=60
     )
     rate_limit_delay: float = Field(
-        default=1.0,
+        default=0.5,  # Reduced from 1.0 since no external API limits
         validation_alias="RATE_LIMIT_DELAY",
         description="Delay between API calls to respect rate limits",
         ge=0.1,
@@ -160,7 +154,7 @@ class ResearcherConfig(BaseSettings):
     
     # Content Quality settings
     min_content_quality_score: float = Field(
-        default=0.3,
+        default=0.4,  # Slightly increased from 0.3 for better quality
         validation_alias="MIN_CONTENT_QUALITY_SCORE",
         description="Minimum quality score for content inclusion",
         ge=0.0,
@@ -242,16 +236,16 @@ class ResearcherConfig(BaseSettings):
         description="List of blocked domain patterns"
     )
     min_source_score: float = Field(
-        default=0.8,
+        default=0.4,  # Reduced from 0.8 for more flexibility with local processing
         validation_alias="MIN_SOURCE_SCORE",
         description="Minimum Tavily source score to include",
         ge=0.0,
         le=1.0
     )
     
-    # Storage settings
+    # Storage settings (OPTIMIZED FOR OLLAMA)
     batch_size: int = Field(
-        default=50,
+        default=25,  # Reduced from 50 for more stable local processing
         validation_alias="CHROMA_BATCH_SIZE",
         description="Batch size for Chroma insertions",
         ge=1,
