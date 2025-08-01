@@ -28,6 +28,7 @@ import traceback
 import logging
 from hashlib import sha256
 import chromadb
+from chromadb.errors import NotFoundError
 from chromadb.config import Settings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_ollama import OllamaEmbeddings  # Changed from OpenAI to Ollama
@@ -97,9 +98,9 @@ class ResearcherAgent:
             # Initialize Tavily client
             if self.config.tavily_api_key:
                 self.tavily_client = TavilyClient(api_key=self.config.tavily_api_key)
-                logger.info("Tavily client initialized")
+                logger.info("✅  Tavily client initialized")
             else:
-                logger.error("Tavily API key not provided")
+                logger.error("🛑  Tavily API key not provided")
                 raise ValueError("Tavily API key is required")
             
             # Initialize Chroma client
@@ -112,56 +113,103 @@ class ResearcherAgent:
                 )
             )
             
-            # Get or create collection
-            try:
-                self.chroma_collection = self.chroma_client.get_collection(
-                    name=self.config.chroma_collection_name
-                )
-                logger.info(f"Using existing Chroma collection: {self.config.chroma_collection_name}")
-            except Exception:
-                # Create collection with metadata for filtering
-                self.chroma_collection = self.chroma_client.create_collection(
-                    name=self.config.chroma_collection_name,
-                    metadata={
-                        "description": "Research materials for book writing",
-                        "embedding_model": self.config.embedding_model,
-                        "created_at": datetime.now(timezone.utc).isoformat()
-                    }
-                )
-                logger.info(f"Created new Chroma collection: {self.config.chroma_collection_name}")
-            
-            # Initialize Ollama embeddings
-            # Get base URL and model from config, with sensible defaults
+            # Handle collection creation/recreation with dimension check
+            self.chroma_collection = self._get_or_create_collection_safe(self.config, drop_if_exists=True)
+
             ollama_base_url = getattr(self.config, 'ollama_base_url', 'http://localhost:11434')
             embedding_model = getattr(self.config, 'embedding_model', 'nomic-embed-text')
-            
-            # Validate that we're using a supported embedding model
-            supported_models = ['nomic-embed-text', 'mxbai-embed-large', 'all-minilm']
-            if embedding_model not in supported_models:
-                logger.warning(f"Model {embedding_model} not in recommended list. Using nomic-embed-text instead.")
-                embedding_model = 'nomic-embed-text'
             
             self.embeddings = OllamaEmbeddings(
                 model=embedding_model,
                 base_url=ollama_base_url
             )
             
-            logger.info(f"Ollama embeddings initialized with model: {embedding_model} at {ollama_base_url}")
+            logger.info(f"✅  Ollama embeddings initialized with model: {embedding_model}")
             
-            # Initialize text splitter
+            # Initialize other components
+            # from langchain.text_splitter import RecursiveCharacterTextSplitter
             self.text_splitter = RecursiveCharacterTextSplitter(
                 chunk_size=self.config.chunk_size,
                 chunk_overlap=self.config.chunk_overlap,
                 separators=["\n\n", "\n", ". ", "! ", "? ", " ", ""]
             )
             
-            logger.info("All components initialized successfully")
+            logger.info("✅  All components initialized successfully")
             
         except Exception as e:
-            logger.error(f"Failed to initialize components: {e}")
+            logger.error(f"🛑  Failed to initialize components: {e}")
             raise
+
+    def _get_or_create_collection_safe(self, config: ResearcherConfig, drop_if_exists:bool = False):
+        """
+        Safely get or create ChromaDB collection, handling dimension mismatches.
+        """
+        collection_name = config.chroma_collection_name
+        expected_embedding_model = getattr(config, 'embedding_model', 'nomic-embed-text')
+        # Get expected dimensions for current model
+        model_dimensions = {
+            'nomic-embed-text': 768,
+            'mxbai-embed-large': 1024,
+            'all-minilm': 384,
+            'text-embedding-ada-002': 1536,  # OpenAI model
+            'text-embedding-3-small': 1536,
+            'text-embedding-3-large': 3072
+        }
+        
+        try:
+            # Try to get existing 
+            if drop_if_exists:
+                self.chroma_client.delete_collection(name=collection_name)
+
+            collection = self.chroma_client.get_collection(name=collection_name)
+            
+            # Check if the collection metadata indicates a different embedding model
+            collection_metadata = collection.metadata or {}
+            stored_model = collection_metadata.get('embedding_model', 'unknown')
+            
+            
+            expected_dims = model_dimensions.get(expected_embedding_model, 768)
+            stored_dims = model_dimensions.get(stored_model, None)
+            
+            # If dimensions don't match, recreate collection
+            if stored_dims and stored_dims != expected_dims:
+                logger.warning(f"Collection '{collection_name}' expects {stored_dims}D embeddings "
+                             f"(model: {stored_model}), but current model '{expected_embedding_model}' "
+                             f"produces {expected_dims}D embeddings. Recreating collection.")
+                
+                # Delete and recreate
+                self.chroma_client.delete_collection(name=collection_name)
+                collection = self._create_new_collection(config, expected_embedding_model, expected_dims)
+            else:
+                logger.info(f"Using existing collection '{collection_name}' with model: {stored_model}")
+            
+            return collection
+            
+        except Exception or NotFoundError as e:
+            # Collection doesn't exist, create new one
+            logger.info(f"Creating new collection '{collection_name}': {e}")
+            expected_dims = model_dimensions.get(expected_embedding_model, 768)
+            return self._create_new_collection(config, expected_embedding_model, expected_dims)
     
-    def execute_research(self, research_id:str, queries: List[ResearchQuery]) -> Dict[str, Any]:
+    def _create_new_collection(self, config: ResearcherConfig, embedding_model: str, dimensions: int):
+        """Create a new ChromaDB collection with proper metadata."""
+        collection = self.chroma_client.create_collection(
+            name=config.chroma_collection_name,
+            metadata={
+                "description": "Research materials for book writing",
+                "embedding_model": embedding_model,
+                "embedding_dimensions": dimensions,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "migration_from": "openai_to_local" if dimensions == 768 else "new_collection"
+            }
+        )
+        logger.info(f"Created new collection '{config.chroma_collection_name}' "
+                   f"for {embedding_model} ({dimensions} dimensions)")
+        return collection
+
+
+
+    async def execute_research(self, research_id:str, queries: List[ResearchQuery]) -> Dict[str, Any]:
         """
         Execute research for all pending queries in the state.
         
@@ -195,7 +243,7 @@ class ResearcherAgent:
             logger.info(f"Processing {len(pending_queries)} research queries")
             
             # Execute research queries with concurrency control
-            research_results = self._execute_queries_concurrently(pending_queries, research_id)
+            research_results = await self._execute_queries_concurrently(pending_queries, research_id)
             
             # Update query statuses
             updated_queries = self._update_query_statuses(queries, research_results)
@@ -269,8 +317,41 @@ class ResearcherAgent:
         
         return sorted_queries
 
+    async def _execute_queries_concurrently(self, queries: List[ResearchQuery], research_id: str) -> Dict[str, ResearchResults]:
+        """
+        Execute research queries with controlled concurrency.
+        
+        Args:
+            queries: List of research queries to execute
+            research_id: Research identifier for metadata
+            
+        Returns:
+            Dictionary mapping query text to ResearchResults
+        """
+        results = {}
+        
+        # Process queries in batches to respect concurrency limits
+        batch_size = self.config.max_concurrent_queries
+        
+        queries = self._sort_research_queries_by_priority(queries)
 
-    def _execute_queries_concurrently(self, queries: List[ResearchQuery], research_id: str) -> Dict[str, ResearchResults]:
+        for i in range(0, len(queries), batch_size):
+            batch = queries[i:i + batch_size]
+            
+            logger.info(f"Processing batch {i//batch_size + 1} with {len(batch)} queries")
+            
+            # Execute batch concurrently using await
+            batch_results = await self._execute_query_batch(batch, research_id)
+            results.update(batch_results)
+            
+            # Rate limiting between batches
+            if i + batch_size < len(queries):
+                await asyncio.sleep(self.config.rate_limit_delay)  # Use async sleep
+        
+        return results
+
+
+    def _execute_queries_concurrently_old(self, queries: List[ResearchQuery], research_id: str) -> Dict[str, ResearchResults]:
         """
         Execute research queries with controlled concurrency.
         
@@ -376,7 +457,7 @@ class ResearcherAgent:
                 execution_time = time.time() - start_time
                 
                 result = ResearchResults(
-                    query=query['query'],
+                    query=query.get_query(),
                     search_results=filtered_results,
                     processed_chunks=processed_chunks,
                     total_chunks_stored=chunks_stored,
@@ -387,7 +468,7 @@ class ResearcherAgent:
                 )
                 
                 logger.info(
-                    f"Query '{query['query']}' completed: {chunks_stored} chunks stored, "
+                    f"Query [{query.get_query()}]' completed: {chunks_stored} chunks stored, "
                     f"{len(filtered_results)} sources processed in {execution_time:.2f}s"
                 )
                 
@@ -395,7 +476,7 @@ class ResearcherAgent:
                 
             except Exception as e:
                 last_error = e
-                logger.warning(f"Query '{query['query']}' attempt {attempt + 1} failed: {e}")
+                logger.warning(f"Query [{query.get_query()}] attempt {attempt + 1} failed: {e}")
                 
                 if attempt < self.config.query_retry_attempts - 1:
                     await asyncio.sleep(self.config.retry_delay_seconds)
@@ -1121,7 +1202,7 @@ class ResearcherAgent:
         return current_stats
     
 
-def main():
+async def main():
     import json
     from uuid import uuid4
     from pathlib import Path
@@ -1131,13 +1212,13 @@ def main():
     sys.path.insert(0, str(project_root))
     conf = ResearcherConfig()
     agent = ResearcherAgent(conf)
-    with open('musequill/services/backend/outputs/research-20250731-231103.json', "r", encoding='utf-8') as f:
+    with open('musequill/services/backend/outputs/research-20250801-184051.json', "r", encoding='utf-8') as f:
         json_payload = f.read()
         payload = json.loads(json_payload)
         research_id = str(uuid4())
         queries = ResearchQuery.load_research_queries(json_payload)
-        results = agent.execute_research(research_id, queries)
-        print(json.dumps(results))
+        results = await agent.execute_research(research_id, queries)
+        print('DONE')        
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

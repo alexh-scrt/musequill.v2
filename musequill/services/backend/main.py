@@ -14,8 +14,10 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 import logging
+from hashlib import sha256
+from uuid import uuid4
 
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -46,6 +48,12 @@ from musequill.services.backend.utils import (
     seconds_to_time_string,
     extract_json_from_response
 )
+from musequill.services.backend.researcher import (
+    ResearcherAgent,
+    ResearcherConfig,
+    ResearchQuery
+)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -161,6 +169,19 @@ def display_book_info(book_model: BookModelType) -> None:
     for line in lines:
         print(f"  {line}")
 
+def save_research_data(data: Dict[str, Any], filename: str):
+    """Save research data with ResearchQuery objects to JSON."""
+    
+    class ResearchEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if hasattr(obj, '__dict__'):
+                return obj.__dict__  # Convert any object with attributes to dict
+            elif hasattr(obj, 'value'):  # Handle enums
+                return obj.value
+            return str(obj)  # Fallback to string
+    
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False, cls=ResearchEncoder)
 
 async def main():
 
@@ -405,9 +426,25 @@ Examples:
             extension="json"
         )
         json_payload = extract_json_from_response(response['response'])
+        json_str = json.dumps(json_payload)
         with open(plan_filename, 'w', encoding='utf-8') as f:
-            f.write(json.dumps(json_payload))
-        
+            f.write(json_str)
+
+        book_id = str(uuid4())
+
+        researcher_config = ResearcherConfig()
+        researcher = ResearcherAgent(researcher_config)
+        research_results = researcher.execute_research(book_id, ResearchQuery.load_research_queries(json_str))
+
+        research_result_filename = generate_filename(
+            output_path,
+            prefix="research-result",
+            extension="json"
+        )
+        save_research_data(research_results, research_result_filename)
+
+        # After the deailed research is done, we can now generate the book chapter plan
+
         print('DONE')
     except Exception as e:
         logger.error(f"Error: {e}")

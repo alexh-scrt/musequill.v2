@@ -56,7 +56,7 @@ class ResearcherConfig(BaseSettings):
         description="Chroma database port"
     )
     chroma_collection_name: str = Field(
-        default="book_research",
+        default="research_collection",
         validation_alias="CHROMA_COLLECTION_NAME",
         description="Chroma collection name for storing research materials"
     )
@@ -79,11 +79,19 @@ class ResearcherConfig(BaseSettings):
     )
     embedding_model: str = Field(
         default="nomic-embed-text",
-        validation_alias="EMBEDDING_MODEL",
+        validation_alias="OLLAMA_EMBEDDING_MODEL",
         description="Ollama embedding model (nomic-embed-text, mxbai-embed-large, all-minilm)"
     )
     # Note: Removed openai_api_key and embedding_dimensions as they're not needed for Ollama
-    
+
+    embedding_dimensions: int = Field(
+        default=768,  # Reduced from 1024 for better Ollama performance
+        validation_alias="OLLAMA_EMBEDDING_DIMENSIONS",
+        description="Ollama embedding dimensions",
+        ge=64,
+        le=1536
+    )
+
     # Text Processing settings
     chunk_size: int = Field(
         default=800,  # Reduced from 1000 for better Ollama performance
