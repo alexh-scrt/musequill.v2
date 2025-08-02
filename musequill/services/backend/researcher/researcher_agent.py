@@ -457,9 +457,9 @@ class ResearcherAgent:
                 execution_time = time.time() - start_time
                 
                 result = ResearchResults(
-                    query=query.get_query(),
+                    query=query.category,
                     search_results=filtered_results,
-                    processed_chunks=processed_chunks,
+                    processed_chunks=[],
                     total_chunks_stored=chunks_stored,
                     total_sources=len(filtered_results),
                     quality_stats=quality_stats,
@@ -530,7 +530,7 @@ class ResearcherAgent:
                     url=result.get('url', ''),
                     title=result.get('title', ''),
                     content=result.get('content', ''),
-                    raw_content=result.get('raw_content', ''),
+                    # raw_content=result.get('raw_content', ''),
                     score=result.get('score', 0.0),
                     published_date=result.get('published_date'),
                     domain=domain,
@@ -618,7 +618,7 @@ class ResearcherAgent:
             return True
         
         # Use raw_content if available, otherwise fall back to content
-        content = result.raw_content or result.content
+        content = result.tavily_answer or result.content
         
         if not content or len(content.strip()) < self.config.min_chunk_size:
             return False
@@ -679,7 +679,7 @@ class ResearcherAgent:
         for result in results:
             try:
                 # Get content (prefer raw_content)
-                content = result.raw_content or result.content
+                content = result.tavily_answer or result.content
                 if not content:
                     continue
                 

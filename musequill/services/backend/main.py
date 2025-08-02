@@ -14,10 +14,11 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import logging
 from hashlib import sha256
 from uuid import uuid4
+import time 
 
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -36,17 +37,20 @@ from musequill.services.backend.prompts import (
     PlanningPromptGenerator,
     PlanningConfig,
     ResearchPromptGenerator,
-    generate_validation_prompt
+    generate_validation_prompt,
+    BookDNAInputs,
+    BookDNAPromptGenerator
 )
 from musequill.services.backend.model import (
     BookModelType,
-    BookBlueprint
+    BookBlueprint,
 )
 from musequill.services.backend.llm.ollama_client import LLMService
 from musequill.services.backend.utils import (
     generate_filename,
     seconds_to_time_string,
-    extract_json_from_response
+    extract_json_from_response,
+    tick
 )
 from musequill.services.backend.researcher import (
     ResearcherAgent,
@@ -186,7 +190,7 @@ def save_research_data(data: Dict[str, Any], filename: str):
 async def main():
 
     config = get_settings()
-    
+    start = time.perf_counter()
     logger.info(f"Loaded configuration: {config.model_dump_json(indent=2)}")
 
     """Main function to handle command line arguments and orchestrate the process."""
@@ -434,7 +438,7 @@ Examples:
 
         researcher_config = ResearcherConfig()
         researcher = ResearcherAgent(researcher_config)
-        research_results = researcher.execute_research(book_id, ResearchQuery.load_research_queries(json_str))
+        research_results = await researcher.execute_research(book_id, ResearchQuery.load_research_queries(json_str))
 
         research_result_filename = generate_filename(
             output_path,
@@ -444,11 +448,52 @@ Examples:
         save_research_data(research_results, research_result_filename)
 
         # After the deailed research is done, we can now generate the book chapter plan
-
-        print('DONE')
+        stop = time.perf_counter()
+        lapse = tick(start, stop)
+        print(f'DONE in {lapse}')
     except Exception as e:
         logger.error(f"Error: {e}")
 
+async def book_dna():
+    start = time.perf_counter()
+    config = get_settings()
+    with open('musequill/services/backend/outputs/book_model-20250801-202621.json', 'r', encoding='utf-8') as f:
+        book_model = json.load(f)
+    with open('musequill/services/backend/outputs/blueprint-response-20250801-202936.json', 'r', encoding='utf-8') as f:
+        book_blueprint = json.load(f)
+    with open('musequill/services/backend/outputs/research-result-20250801-203850.json', 'r', encoding='utf-8') as f:
+        research_results = json.load(f)
+    with open('musequill/services/backend/outputs/summary-response-20250801-202749.md', 'r', encoding='utf-8') as f:
+        book_summary = f.read()
+
+    research_types: List[Dict[str, Any]] = []
+    for query in research_results['updated_queries']:
+        research_types.append({'type':query['topic']})
+    book_id: str = str(uuid4())
+    dna_input = BookDNAInputs(**{
+        'book_model': book_model,
+        'book_blueprint': book_blueprint,
+        'research_topics': research_types,
+        'book_summary': book_summary,
+        'book_id': book_id
+    })
+
+    prompt = BookDNAPromptGenerator.generate_dna_prompt(dna_input)
+    llm_service = LLMService(model_name="llama3.3:70b")
+    llm_service.update_default_parameters(
+        temperature=1.3,
+        max_tokens=800,
+        top_k=10,
+        top_p=0.9,
+        repeat_penalty=1.1
+    )
+    await llm_service.initialize()
+    logger.info("LLM Service initialized successfully")
+    response = await llm_service.generate([prompt])
+    val_rep = BookDNAPromptGenerator.validate_dna_output(response['response'])
+    print(json.dumps(val_rep, indent=2, ensure_ascii=False))
+    end = time.perf_counter()
+    print(f'done : {tick(start, end)}')
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(book_dna())

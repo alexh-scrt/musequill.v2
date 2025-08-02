@@ -34,7 +34,7 @@ class ResearcherConfig(BaseSettings):
         description="Include Tavily's answer summary"
     )
     tavily_include_raw_content: bool = Field(
-        default=True,
+        default=False,
         validation_alias="TAVILY_INCLUDE_RAW_CONTENT", 
         description="Include raw content from sources"
     )

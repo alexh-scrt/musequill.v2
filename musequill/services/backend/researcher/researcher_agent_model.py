@@ -39,7 +39,7 @@ class SearchResult:
     url: str
     title: str
     content: str
-    raw_content: str
+#    raw_content: str
     score: float
     published_date: Optional[str]
     domain: str
