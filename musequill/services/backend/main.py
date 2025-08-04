@@ -45,7 +45,11 @@ from musequill.services.backend.model import (
     BookModelType,
     BookBlueprint,
 )
-from musequill.services.backend.llm.ollama_client import LLMService
+from musequill.services.backend.llm.ollama_client import (
+    create_llm_service,
+    LLMService
+)
+
 from musequill.services.backend.utils import (
     generate_filename,
     seconds_to_time_string,
@@ -56,6 +60,17 @@ from musequill.services.backend.researcher import (
     ResearcherAgent,
     ResearcherConfig,
     ResearchQuery
+)
+
+from musequill.services.backend.context import (
+    LLMContextManager,
+    create_metadata_generator,
+    MetadataGenerator,
+    MetadataPromptConfig,
+)
+
+from musequill.services.backend.integration import (
+    create_llm_context_manager
 )
 
 # Configure logging
@@ -274,30 +289,26 @@ Examples:
     logger.info(f"\n✅ Successfully processed template: {args.template}")
 
     try:
-        recommended_model_settings: Optional[dict] = None
-        llm_service = LLMService(model_name="llama3.3:70b")
-        await llm_service.initialize()
-        logger.info("LLM Service initialized successfully")
+        context_manager:LLMContextManager = create_llm_context_manager()
 
+
+        recommended_model_settings: Optional[dict] = None
+        llm_service:LLMService = create_llm_service()
+
+        # BOOK SUMMARY
         bspg = BookSummaryPromptGenerator()
         book_data = book_model.model_dump()
         prompt = bspg.generate_prompt(book_data)
-        llm_service.update_default_parameters(
-            temperature=0.3,
-            max_tokens=5000,
-            top_p=0.5
-        )
 
-        if args.output:
-            output_path.parent.mkdir(exist_ok=True)
-            prompt_filename = generate_filename(
-                output_path,
-                prefix="summary-prompt",
-                extension="md"
-            )
-            bspg.save_prompt_to_file(prompt, prompt_filename)
-        else:
-            print(prompt)
+        output_path.parent.mkdir(exist_ok=True)
+        prompt_filename = generate_filename(
+            output_path,
+            prefix="summary-prompt",
+            extension="md"
+        )
+        # save book summary prompt
+        bspg.save_prompt_to_file(prompt, prompt_filename)
+        # get prompts stats
         stats = bspg.get_prompt_statistics(book_model.model_dump())
         print("\n" + "="*50)
         print("PROMPT STATISTICS")
@@ -310,9 +321,9 @@ Examples:
             else:
                 print(f"{key}: {value}")
         recommended_model_settings = stats.get('recommended_model_settings')
-
         if recommended_model_settings:
-            llm_service.update_default_parameters(
+            # update the llm with the prompt recommended settings
+            await llm_service.update_default_parameters(
                 temperature=recommended_model_settings.get('temperature', 0.7),
                 max_tokens=recommended_model_settings.get('max_tokens', 5000),
                 top_p=recommended_model_settings.get('top_p', 0.5),
@@ -320,12 +331,21 @@ Examples:
                 repeat_penalty=recommended_model_settings.get('repeat_penalty', 1.1),
                 stop=recommended_model_settings.get("stop")
             )
-            await llm_service.initialize()
-
+        else:
+            # prompt stats not available - use default
+            await llm_service.update_default_parameters(
+                temperature=0.7,
+                max_tokens=5000,
+                top_p=0.5,
+                top_k=40,
+                repeat_penalty=1.1,
+                stop=None
+            )
+        # generate book summary response
         response = await llm_service.generate([prompt])
         if response.get('timelapse', 0):
             print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
-
+        # save book summary
         output_path.parent.mkdir(exist_ok=True)
         response_filename = generate_filename(
             output_path,
@@ -335,6 +355,7 @@ Examples:
         with open(response_filename, 'w', encoding='utf-8') as f:
             f.write(response['response'])
 
+        
         book_summary = response['response']
 
         # Blueprint Generation
@@ -455,6 +476,10 @@ Examples:
         logger.error(f"Error: {e}")
 
 async def book_dna():
+
+    ctx_mgr = await create_llm_context_manager()
+
+    
     start = time.perf_counter()
     config = get_settings()
     with open('musequill/services/backend/outputs/book_model-20250801-202621.json', 'r', encoding='utf-8') as f:
@@ -479,15 +504,14 @@ async def book_dna():
     })
 
     prompt = BookDNAPromptGenerator.generate_dna_prompt(dna_input)
-    llm_service = LLMService(model_name="llama3.3:70b")
-    llm_service.update_default_parameters(
+    llm_service = create_llm_service()
+    await llm_service.update_default_parameters(
         temperature=1.3,
         max_tokens=800,
         top_k=10,
         top_p=0.9,
         repeat_penalty=1.1
     )
-    await llm_service.initialize()
     logger.info("LLM Service initialized successfully")
     response = await llm_service.generate([prompt])
     val_rep = BookDNAPromptGenerator.validate_dna_output(response['response'])

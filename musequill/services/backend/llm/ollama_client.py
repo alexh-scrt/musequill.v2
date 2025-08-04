@@ -7,6 +7,7 @@ import time
 from langchain_ollama import OllamaLLM
 from langchain.schema import BaseMessage, HumanMessage, SystemMessage
 
+from .ollama_config import OllamaConfig
 
 logger = logging.getLogger(__name__)
 
@@ -18,25 +19,18 @@ class LLMService:
     """Service for LLM communication via Ollama."""
     
     def __init__(
-        self, 
-        model_name: str = "llama3.3:70b", 
-        base_url: str = "http://localhost:11434",
-        temperature: float = 0.3,
-        max_tokens: Optional[int] = None,
-        top_p: float = 1.0,
-        top_k: Optional[int] = None,
-        repeat_penalty: Optional[float] = None,
-        stop: Optional[str] = None
+        self,
+        ollama_config: OllamaConfig,
     ):
-        self.model_name = model_name
-        self.base_url = base_url
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-        self.top_p = top_p
-        self.top_k = top_k
-        self.repeat_penalty = repeat_penalty
-        self.stop = stop
-        self.llm = None
+        self.base_url: str = ollama_config.base_url
+        self.model_name: str = ollama_config.model_name
+        self.temperature: float = 0.3
+        self.max_tokens: Optional[int] = None
+        self.top_p: float = 1.0
+        self.top_k: Optional[int] = None
+        self.repeat_penalty: Optional[float] = None
+        self.stop: Optional[str] = None
+        self.llm: Optional[OllamaLLM] = None
         
     async def initialize(self):
         """Initialize LLM connection."""
@@ -154,7 +148,7 @@ class LLMService:
                 "error": str(e)
             }
     
-    def update_default_parameters(
+    async def update_default_parameters(
         self, 
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
@@ -185,10 +179,13 @@ class LLMService:
         if stop is not None:
             self.stop = stop
 
+        logger.info("Calling initialize() again to apply these changes to the LLM instance")
+
+        await self.initialize()
+
         logger.info(f"Updated default parameters: temperature={self.temperature}, "
                    f"max_tokens={self.max_tokens}, top_p={self.top_p}"
                    f"top_k={self.top_k}, repeat_penalty={self.repeat_penalty}, stop={self.stop}")
-        logger.info("Call initialize() again to apply these changes to the LLM instance")
     
     def get_current_parameters(self) -> Dict[str, Any]:
         """Get the current parameter configuration."""
@@ -200,3 +197,9 @@ class LLMService:
             "top_p": self.top_p,
             "is_initialized": self.llm is not None
         }
+    
+def create_llm_service(ollama_config: Optional[OllamaConfig] = None) -> LLMService:
+    """Create and return an LLMService instance."""
+    if not ollama_config:
+        ollama_config = OllamaConfig()
+    return LLMService(ollama_config)

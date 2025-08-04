@@ -22,30 +22,16 @@ from dataclasses import dataclass
 from enum import Enum
 
 # Import actual book model enums
-try:
-    from musequill.models.book.writing_style import WritingStyle
-    from musequill.models.book.book_length import BookLength
-    from musequill.models.book.genre import GenreType, SubGenreType
-    from musequill.models.book.audience import AudienceType
-    from musequill.models.book.world import WorldType
-    from musequill.models.book.story_structure import StoryStructure
-    from musequill.models.book.conflict import ConflictType
-    from musequill.models.book.narrative_pov import NarrativePOV
-    from musequill.models.book.pacing_style import PacingStyle
-    from musequill.models.book.tone_style import ToneStyle
-except ImportError as e:
-    # Fallback to None - will use string validation
-    WritingStyle = None
-    BookLength = None
-    GenreType = None
-    SubGenreType = None
-    AudienceType = None
-    WorldType = None
-    StoryStructure = None
-    ConflictType = None
-    POVType = None
-    PacingStyle = None
-    ToneStyle = None
+from musequill.models.book.writing_style import WritingStyle
+from musequill.models.book.book_length import BookLength
+from musequill.models.book.genre import GenreType, SubGenreType
+from musequill.models.book.audience import AudienceType
+from musequill.models.book.world import WorldType
+from musequill.models.book.story_structure import StoryStructure
+from musequill.models.book.conflict import ConflictType
+from musequill.models.book.narrative_pov import NarrativePOV
+from musequill.models.book.pacing_style import PacingStyle
+from musequill.models.book.tone_style import ToneStyle
 
 
 logger = logging.getLogger(__name__)
