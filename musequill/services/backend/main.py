@@ -14,7 +14,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, cast, Iterable, Tuple
 import logging
 from hashlib import sha256
 from uuid import uuid4
@@ -59,7 +59,9 @@ from musequill.services.backend.utils import (
 from musequill.services.backend.researcher import (
     ResearcherAgent,
     ResearcherConfig,
-    ResearchQuery
+    ResearchQuery,
+    ResearchResults,
+    SearchResult
 )
 
 from musequill.services.backend.context import (
@@ -203,10 +205,11 @@ def save_research_data(data: Dict[str, Any], filename: str):
         json.dump(data, f, indent=2, ensure_ascii=False, cls=ResearchEncoder)
 
 async def main():
-
+    logger.info("🚀  Starting backend service...")
+    logger.info("🏗️  Loading configuration...")
     config = get_settings()
     start = time.perf_counter()
-    logger.info(f"Loaded configuration: {config.model_dump_json(indent=2)}")
+    logger.info(f"✅  Loaded configuration: {config.model_dump_json(indent=2)}")
 
     """Main function to handle command line arguments and orchestrate the process."""
     parser = argparse.ArgumentParser(
@@ -249,7 +252,7 @@ Examples:
     args = parser.parse_args()
     
     if args.verbose:
-        logger.info(f"Loading template: {args.template}")
+        logger.info(f"🏗️  Loading template: {args.template}")
         logger.info(f"Template path: musequill/services/backend/templates/{args.template}.json")
     
     # Load the template
@@ -264,7 +267,10 @@ Examples:
     
     # Display book information
     display_book_info(book_model)
-    
+
+    book_id = str(uuid4())
+    logger.info(f'🆕  New book id: {book_id}')
+
     # Save to output file if specified
     if args.output:
         try:
@@ -278,7 +284,7 @@ Examples:
                 extension="json"
             )
             with open(book_model_filename, 'w', encoding='utf-8') as f:
-                json.dump(book_model.dict(), f, indent=2, ensure_ascii=False)
+                json.dump(book_model.model_dump(), f, indent=2, ensure_ascii=False)
             
             logger.info(f"\nBook model saved to: {output_path}")
             
@@ -289,13 +295,15 @@ Examples:
     logger.info(f"\n✅ Successfully processed template: {args.template}")
 
     try:
-        context_manager:LLMContextManager = create_llm_context_manager()
-
+        logger.info('Creating LLM Context Manager...')
+        ctx_mgr:LLMContextManager = await create_llm_context_manager()
+        logger.info("✅ LLM Context Manager initialized")
 
         recommended_model_settings: Optional[dict] = None
         llm_service:LLMService = create_llm_service()
 
         # BOOK SUMMARY
+        logger.info("\n📚 Generating Book Summary...")
         bspg = BookSummaryPromptGenerator()
         book_data = book_model.model_dump()
         prompt = bspg.generate_prompt(book_data)
@@ -310,18 +318,28 @@ Examples:
         bspg.save_prompt_to_file(prompt, prompt_filename)
         # get prompts stats
         stats = bspg.get_prompt_statistics(book_model.model_dump())
-        print("\n" + "="*50)
-        print("PROMPT STATISTICS")
-        print("="*50)
-        for key, value in stats.items():
-            if isinstance(value, dict):
-                print(f"{key}:")
-                for sub_key, sub_value in value.items():
-                    print(f"  {sub_key}: {sub_value}")
-            else:
-                print(f"{key}: {value}")
+        stats['prompt'] = f'{prompt[:60]+"..." if len(prompt)>60 else prompt}'
+        stats['prompt_length'] = len(prompt)
+        stats['prompt_file'] = prompt_filename
+        prompt_str: str = json.dumps(stats, indent=2)
+
+        logger.info(f"\n📝 Book Summary Prompt:\n{prompt_str}")
+
+        # print("\n" + "="*50)
+        # print("PROMPT STATISTICS")
+        # print("="*50)
+        # for key, value in stats.items():
+        #     if isinstance(value, dict):
+        #         print(f"{key}:")
+        #         for sub_key, sub_value in value.items():
+        #             print(f"  {sub_key}: {sub_value}")
+        #     else:
+        #         print(f"{key}: {value}")
+
+
         recommended_model_settings = stats.get('recommended_model_settings')
         if recommended_model_settings:
+            logger.info(f'ℹ️  Using recommended model settings:\n{json.dumps(recommended_model_settings, indent=2)}\n')
             # update the llm with the prompt recommended settings
             await llm_service.update_default_parameters(
                 temperature=recommended_model_settings.get('temperature', 0.7),
@@ -332,6 +350,7 @@ Examples:
                 stop=recommended_model_settings.get("stop")
             )
         else:
+            logger.info("ℹ️  No recommended model settings found, using defaults")
             # prompt stats not available - use default
             await llm_service.update_default_parameters(
                 temperature=0.7,
@@ -342,6 +361,7 @@ Examples:
                 stop=None
             )
         # generate book summary response
+        logger.info("🤖 Generating book summary...")
         response = await llm_service.generate([prompt])
         if response.get('timelapse', 0):
             print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
@@ -355,45 +375,90 @@ Examples:
         with open(response_filename, 'w', encoding='utf-8') as f:
             f.write(response['response'])
 
-        
         book_summary = response['response']
+        flag = await ctx_mgr.store(
+            book_id=book_id,
+            as_vector=False, # Redis in-mem store
+            metadata=book_model,
+            content_id="book_summary",
+            content=response['response'],
+        )
+        if not flag:
+            logger.error("🔴  Failed to store book summary")
+            sys.exit(1)
+        logger.info(f'📝  Book summary stored to {ctx_mgr.__class__.__name__}')
+        
 
         # Blueprint Generation
+        logger.info("\n📚 Generating Book Blueprint...")
         prompt = BlueprintPromptGenerator.generate_prompt(book_model)
         stats = BlueprintPromptGenerator.get_prompt_statistics(book_model)
         recommended_model_settings = stats.get('recommended_model_settings')
-        print("\n" + "="*50)
-        print("PROMPT STATISTICS")
-        print("="*50)
-        for key, value in stats.items():
-            if isinstance(value, dict):
-                print(f"{key}:")
-                for sub_key, sub_value in value.items():
-                    print(f"  {sub_key}: {sub_value}")
-            else:
-                print(f"{key}: {value}")
-
-        llm_service.update_default_parameters(
-            temperature=0.3,
-            top_p=0.7
-        )
-        await llm_service.initialize()
-
-        response = await llm_service.generate([prompt])
-        if response.get('timelapse', 0):
-            print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
-        if args.output:
-            json_payload = extract_json_from_response(response['response'])
-            output_path.parent.mkdir(exist_ok=True)
-            response_filename = generate_filename(
-                output_path,
-                prefix="blueprint-response",
-                extension="json"
+        if recommended_model_settings:
+            logger.info(f'ℹ️  Using recommended model settings:\n{json.dumps(recommended_model_settings, indent=2)}\n')
+            # update the llm with the prompt recommended settings
+            await llm_service.update_default_parameters(
+                temperature=recommended_model_settings.get('temperature', 0.3),
+                max_tokens=recommended_model_settings.get('max_tokens', 4000),
+                top_p=recommended_model_settings.get('top_p', 0.9)
             )
-            with open(response_filename, 'w', encoding='utf-8') as f:
-                f.write(json.dumps(json_payload))
+
+        logger.info(
+            "🤖 Generating book blueprint..."
+            f"\nℹ️  Prompt:\n\t{prompt[:60] + '...' if len(prompt)>60 else prompt}\n"
+        )
+
+        correction:str = ""
+        while True:
+            try:
+                response = await llm_service.generate([prompt + correction])
+                if response.get('timelapse', 0):
+                    print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
+                valid, payload = BlueprintPromptGenerator.validate_json_response(response['response'])
+                if valid:
+                    break
+                logger.error(f"🔴  LLM Response is not valid JSON: {payload}")
+                correction = f"""You are to correct the following errors that did not pass the validation on compliance with the TARGET JSON SCHEMA:\n
+                        {payload}
+                        Your invalid output that you need to correct:\n
+                        {response['response']}
+                        """
+                await asyncio.sleep(5)
+            except Exception as e:
+                logger.error(f"🔴  LLM Error: {e}")
+                logger.info("🔄  Retrying...")
+                await asyncio.sleep(1)
+
+        json_payload = extract_json_from_response(response['response'])
+        output_path.parent.mkdir(exist_ok=True)
+        response_filename = generate_filename(
+            output_path,
+            prefix="blueprint-response",
+            extension="json"
+        )
+        with open(response_filename, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(json_payload))
+        book_blueprint = json.dumps(json_payload, indent=2)
+        flag = await ctx_mgr.store(
+            book_id=book_id,
+            metadata=book_model,
+            as_vector=False,
+            content_id="book_blueprint",
+            content=json.dumps(json_payload),
+        )
+        if not flag:
+            logger.error("🔴 Failed to store book summary")
+            sys.exit(1)
+        logger.info(f'📝  Book blueprint stored to {ctx_mgr.__class__.__name__}')
+        # book_blueprint = ctx_mgr.retrieve(
+        #     exact_ids=['book_blueprint'],
+        #     filters={
+        #         'book_id': book_id
+        #     }
+        # )
 
         # Planning
+        logger.info("\n📚 Generating Book Planning...")
         pc = PlanningConfig()
         ppg = PlanningPromptGenerator(pc)
         prompt = ppg.generate_planning_prompt(json_payload)
@@ -405,23 +470,38 @@ Examples:
         ppg.save_prompt_to_file(prompt, prompt_filename)
         stats = ppg.get_prompt_stats(prompt)
         recommended_model_settings = stats.get('recommended_model_settings')
-        print("\n" + "="*50)
-        print("PROMPT STATISTICS")
-        print("="*50)
-        for key, value in stats.items():
-            if isinstance(value, dict):
-                print(f"{key}:")
-                for sub_key, sub_value in value.items():
-                    print(f"  {sub_key}: {sub_value}")
-            else:
-                print(f"{key}: {value}")
-        llm_service.update_default_parameters(
-            temperature=1.3,
-            max_tokens=5000,
-            top_p=0.5
+        # print("\n" + "="*50)
+        # print("PROMPT STATISTICS")
+        # print("="*50)
+        # for key, value in stats.items():
+        #     if isinstance(value, dict):
+        #         print(f"{key}:")
+        #         for sub_key, sub_value in value.items():
+        #             print(f"  {sub_key}: {sub_value}")
+        #     else:
+        #         print(f"{key}: {value}")
+        if recommended_model_settings:
+            logger.info(f'ℹ️  Using recommended model settings:\n{json.dumps(recommended_model_settings, indent=2)}\n')
+            # update the llm with the prompt recommended settings
+            await llm_service.update_default_parameters(
+                temperature=recommended_model_settings.get('temperature', 1.3),
+                max_tokens=recommended_model_settings.get('max_tokens', 5000),
+                top_p=recommended_model_settings.get('top_p', 0.5),
+                top_k=recommended_model_settings.get('top_k', 40),
+                repeat_penalty=recommended_model_settings.get('repeat_penalty', 1.1),
+                stop=recommended_model_settings.get("stop"),
+            )
+        else:
+            logger.info("ℹ️  No recommended model settings found, using defaults")
+            await llm_service.update_default_parameters(
+                temperature=1.3,
+                max_tokens=5000,
+                top_p=0.5
+            )
+        logger.info(
+            "🤖 Generating book plan..."
+            f"\nℹ️  Prompt:\n\t{prompt[:60] + '...' if len(prompt)>60 else prompt}\n"
         )
-        await llm_service.initialize()
-
         response = await llm_service.generate([prompt])
         if response.get('timelapse', 0):
             print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
@@ -434,14 +514,29 @@ Examples:
             f.write(response['response'])
 
         book_plan = response['response']
+        flag = await ctx_mgr.store(
+            book_id=book_id,
+            metadata=book_model,
+            as_vector=False,
+            content_id="book_plan",
+            content=book_plan,
+        )
+        if not flag:
+            logger.error("🔴 Failed to store book plan")
+            sys.exit(1)
+        logger.info(f'📝  Book plan stored to {ctx_mgr.__class__.__name__}')
 
         # Research
+        logger.info("\n📚 Generating Book Research...")
         prompt = ResearchPromptGenerator.generate_prompt(book_summary, book_plan)
-        llm_service.update_default_parameters(
+        await llm_service.update_default_parameters(
             temperature=0.3,
         )
-        await llm_service.initialize()
 
+        logger.info(
+            "🤖 Generating book research..."
+            f"\nℹ️  Prompt:\n\t{prompt[:60] + '...' if len(prompt)>60 else prompt}\n"
+        )
         response = await llm_service.generate([prompt])
         if response.get('timelapse', 0):
             print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
@@ -455,8 +550,6 @@ Examples:
         with open(plan_filename, 'w', encoding='utf-8') as f:
             f.write(json_str)
 
-        book_id = str(uuid4())
-
         researcher_config = ResearcherConfig()
         researcher = ResearcherAgent(researcher_config)
         research_results = await researcher.execute_research(book_id, ResearchQuery.load_research_queries(json_str))
@@ -466,7 +559,76 @@ Examples:
             prefix="research-result",
             extension="json"
         )
-        save_research_data(research_results, research_result_filename)
+        
+        # Extract tavily_answer values for JSON serialization
+        def extract_tavily_answers(detailed_results:Dict[str,ResearchResults]):
+            extracted_data = {}
+            for query_type, result in detailed_results.items():
+                tavily_answers = []
+                for sr in cast(Iterable[SearchResult], result.search_results):
+                    tavily_answers.append(sr.tavily_answer)
+                extracted_data[query_type] = tavily_answers
+            return extracted_data
+        
+        research_tavily_data = extract_tavily_answers(research_results.get('detailed_results', {}))
+        save_research_data(research_tavily_data, research_result_filename)
+        
+        flag = await ctx_mgr.store(
+            book_id=book_id,
+            metadata=book_model,
+            as_vector=False,
+            content_id="research_results",
+            content=json.dumps(research_tavily_data),
+        )
+        if not flag:
+            logger.error("🔴 Failed to store book research")
+            sys.exit(1)
+        logger.info(f'📝  Research results stored to {ctx_mgr.__class__.__name__}')
+
+        research_types: list[tuple[str, str]] = [
+            (k, v[0]) for k, v in research_tavily_data.items() if v
+        ]
+        # Book DNA
+        logger.info("\n📚 Generating Book DNA...")
+
+        dna_input = BookDNAInputs(**{
+            'book_model': book_model,
+            'book_blueprint': json.loads(book_blueprint),
+            'research_topics': research_types,
+            'book_summary': book_summary,
+            'book_id': book_id
+        })
+
+        prompt = BookDNAPromptGenerator.generate_dna_prompt(dna_input)
+        await llm_service.update_default_parameters(
+            temperature=1.3,
+            max_tokens=800,
+            top_k=10,
+            top_p=0.9,
+            repeat_penalty=1.1
+        )
+
+        logger.info(
+            "🤖 Generating book dna..."
+            f"\nℹ️  Prompt:\n\t{prompt[:60] + '...' if len(prompt)>60 else prompt}\n"
+        )
+        response = await llm_service.generate([prompt])
+        if response.get('timelapse', 0):
+            print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
+        book_dna = response['response']
+        flag = await ctx_mgr.store(
+            book_id=book_id,
+            metadata=book_model,
+            as_vector=False,
+            content_id="book_dna",
+            content=book_dna
+        )
+        if not flag:
+            logger.error("🔴 Failed to store book dna")
+            sys.exit(1)
+        logger.info(f'📝  Book DNA stored to {ctx_mgr.__class__.__name__}')
+
+
 
         # After the deailed research is done, we can now generate the book chapter plan
         stop = time.perf_counter()
@@ -475,7 +637,7 @@ Examples:
     except Exception as e:
         logger.error(f"Error: {e}")
 
-async def book_dna():
+async def book_dna_fn():
 
     ctx_mgr = await create_llm_context_manager()
 
@@ -520,4 +682,4 @@ async def book_dna():
     print(f'done : {tick(start, end)}')
 
 if __name__ == "__main__":
-    asyncio.run(book_dna())
+    asyncio.run(main())

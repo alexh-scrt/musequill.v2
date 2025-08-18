@@ -31,7 +31,31 @@ class LLMService:
         self.repeat_penalty: Optional[float] = None
         self.stop: Optional[str] = None
         self.llm: Optional[OllamaLLM] = None
-        
+
+    # ----------------------------
+    # String / Debug Representations
+    # ----------------------------
+
+    def __str__(self) -> str:
+        """User-friendly string (for print/logging)."""
+        status = "initialized" if self.llm else "not initialized"
+        return (
+            f"LLMService(model={self.model_name}, base_url={self.base_url}, "
+            f"temperature={self.temperature}, top_p={self.top_p}, "
+            f"max_tokens={self.max_tokens}, status={status})"
+        )
+
+    def __repr__(self) -> str:
+        """Developer-friendly string (for debugging)."""
+        return (
+            f"{self.__class__.__name__}("
+            f"model_name={self.model_name!r}, base_url={self.base_url!r}, "
+            f"temperature={self.temperature!r}, max_tokens={self.max_tokens!r}, "
+            f"top_p={self.top_p!r}, top_k={self.top_k!r}, "
+            f"repeat_penalty={self.repeat_penalty!r}, stop={self.stop!r}, "
+            f"llm={'set' if self.llm else 'None'})"
+        )
+
     async def initialize(self):
         """Initialize LLM connection."""
         try:
@@ -53,13 +77,13 @@ class LLMService:
                 init_params["num_predict"] = self.max_tokens  # Ollama uses 'num_predict' instead of 'max_tokens'
             
             self.llm = OllamaLLM(**init_params)
-            logger.info(f"LLM service initialized with model: {self.model_name}, "
+            logger.info(f"✅  LLM service initialized with model: {self.model_name}, "
                        f"temperature: {self.temperature}, top_p: {self.top_p}, "
                        f"max_tokens: {self.max_tokens}"
                        f"top_k: {self.top_k}, repeat_penalty: {self.repeat_penalty}"
                        f"stop: {self.stop}")
         except Exception as e:
-            logger.error(f"Failed to initialize LLM: {e}")
+            logger.error(f"🔴  Failed to initialize LLM: {e}")
             raise
 
     async def generate(
@@ -83,6 +107,7 @@ class LLMService:
         """
         try:
             if not self.llm:
+                logger.error("🔴 LLM is not initialized")
                 raise RuntimeError("LLM is not initialized")
             
             # Use per-request parameters if provided, otherwise use instance defaults
@@ -97,7 +122,7 @@ class LLMService:
                 request_max_tokens != self.max_tokens or 
                 request_top_p != self.top_p):
                 
-                logger.info(f"Using custom parameters for this request: "
+                logger.info(f"🟢  Using custom parameters for this request: "
                            f"temperature={request_temperature}, "
                            f"max_tokens={request_max_tokens}, "
                            f"top_p={request_top_p}")
@@ -138,12 +163,12 @@ class LLMService:
             }
             
         except json.JSONDecodeError as e:
-            logger.error(f"JSON parsing error in concept analysis: {e}")
+            logger.error(f"🔴  JSON parsing error in concept analysis: {e}")
             return {
                 "error": f"Invalid response: {e}"
             }
         except Exception as e:
-            logger.error(f"Error in concept analysis: {e}")
+            logger.error(f"🔴  Error in concept analysis: {e}")
             return {
                 "error": str(e)
             }

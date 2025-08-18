@@ -12,7 +12,7 @@ import json
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from pathlib import Path
-
+import re
 
 @dataclass
 class BookDNAInputs:
@@ -76,7 +76,7 @@ a 200-300 token essential representation that captures the unique genetic code o
 - Must distinguish this book from all others in the genre
 
 **OUTPUT FORMAT:**
-Return ONLY the Book DNA text without explanations or commentary.
+Return ONLY the Book DNA text without explanations or commentary (e.g. 'Here is the Book DNA for' ). 
 """
 
     def __init__(self):
@@ -100,22 +100,19 @@ Return ONLY the Book DNA text without explanations or commentary.
         
         prompt = f"""{cls.SYSTEM_PROMPT}
 
-## PROJECT DATA ANALYSIS
+## BOOK DNA - book essential information
 
 **Book Model Summary:**
 {cls._format_book_model_summary(context_data['book_model'])}
 
 **Blueprint Essence:**
-{cls._format_blueprint_essence(context_data['blueprint'])}
+{cls._format_blueprint_essence(context_data['blueprint']['blueprint'])}
 
 **Story Positioning:**
 {cls._format_story_positioning(context_data)}
 
 **Research & Constraints:**
 {cls._format_research_constraints(context_data)}
-
-**Unique Differentiators:**
-{cls._identify_unique_elements(context_data)}
 
 ## DNA GENERATION TASK
 
@@ -146,54 +143,48 @@ Generate the Book DNA now:"""
             'book_id': inputs.book_id,
             'summary': inputs.book_summary,
             'research': inputs.research_topics,
-            # 'preferences': inputs.author_preferences or {},
-            # 'market': inputs.market_positioning or {}
         }
     
     @classmethod
     def _format_book_model_summary(cls, book_model: Dict[str, Any]) -> str:
         """Format book model data for prompt context."""
         
-        book = book_model.get('book', {})
-        genre = book_model.get('genre', {})
-        audience = book_model.get('audience', {})
+        book = book_model.book
+        genre = book_model.genre
+        audience = book_model.audience
         
-        return f"""Title: "{book.get('title', 'Unknown')}"
-Author: {book.get('author', 'Unknown')}
-Genre: {genre.get('primary', {}).get('type', 'Unknown')} / {genre.get('sub', {}).get('type', 'Unknown')}
-Audience: {audience.get('type', 'Unknown')} (Ages: {audience.get('age', 'Unknown')})
-Length: {book.get('length', 'Unknown')}
-Core Idea: {book.get('idea', 'Not specified')[:200]}..."""
+        return f"""Title: "{book.title}"
+Author: {book.author}
+Genre: {genre.primary.type}: {genre.primary.description}
+Sub-genre: {genre.sub.type}: {genre.sub.description}
+Audience: {audience.type} (Ages: {audience.age})
+Length: {book.length}
+Core Idea: {book.idea}"""
     
     @classmethod
-    def _format_blueprint_essence(cls, blueprint: Dict[str, Any]) -> str:
-        """Format blueprint data for prompt context."""
-        
-        phase1 = blueprint.get('phase1', {})
-        phase2 = blueprint.get('phase2', {})
-        phase4 = blueprint.get('phase4', {})
-        book_title = phase1.get('book_title')
-        book_genre = phase1.get('genre')
-        book_writing_style = phase1.get('writing_style', f'Typical for genre {book_genre}')
-        book_story_struct = phase2.get('story_structure')
-        book_protagonist = phase2.get('protagonist')
-        book_antagonist = phase2.get('antagonist')
-        book_supporting_characters = ", ".join(phase2.get('supporting_characters', []))
-        book_plot_twists = "; ".join(phase2.get('plot_twists', []))
-        book_workd_building = phase4.get('setting')
-        book_cultures = ", ".join(phase4.get('world_building', {}).get('cultures', []))
+    def _get_from_blueprint(cls, blueprint: Dict[str, Any], phase: str, default: str = 'Not specified') -> str:
+        """Retrieve data from blueprint for the given phase."""
+        for value in blueprint.values():
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    if k == phase:
+                        return v if v is not None else default
 
-        blueprint_essence = f"""Book Title: {book_title}
-Genre: {book_genre}
-Writing Style: {book_writing_style}
-Story Structure: {book_story_struct}
-Protagonist: {book_protagonist}
-Antagonist: {book_antagonist}
-Supporting Characters: {book_supporting_characters}
-Plot Twists: {book_plot_twists}
-World Building: {book_workd_building}
-Cultures: {book_cultures}"""
+    @classmethod
+    def _get_blueprint_essence(cls, blueprint: Dict[str, Any]) -> str:
+        """Retrieve blueprint data for the essence."""
+        blueprint_essence:str = ''
+        for value in blueprint.values():
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    k = re.sub(r"\s+", " ", k.replace("_", " ")).strip().upper()
+                    blueprint_essence += f'{k}: {v}\n'
         return blueprint_essence
+
+    @classmethod
+    def _format_blueprint_essence(cls, blueprint: Dict[str, Any]) -> str:
+        """Format blueprint data for prompt context according to the new 7-phase structure."""
+        return cls._get_blueprint_essence(blueprint)
     
     @classmethod
     def _format_story_positioning(cls, context_data: Dict[str, Any]) -> str:
@@ -202,11 +193,11 @@ Cultures: {book_cultures}"""
         book_model = context_data['book_model']
         summary = context_data['summary']  # First 300 chars
         
-        return f"""Story World: {book_model.get('world', {}).get('type', 'Unknown')}. {book_model.get('world', {}).get('description')}
-Writing Style: {book_model.get('writing_style', 'Unknown')}
-POV: {book_model.get('pov', {}).get('type', 'Unknown')}. {book_model.get('pov', {}).get('description')}
-Tone: {book_model.get('tone', {}).get('type', 'Unknown')}
-Pace: {book_model.get('pace', {}).get('type', 'Unknown')}
+        return f"""Story World: {book_model.world}. {book_model.world.description}
+Writing Style: {book_model.writing_style}
+POV: {book_model.pov}. {book_model.pov.description}
+Tone: {book_model.tone.type}. {book_model.tone.description}
+Pace: {book_model.pace.type}, {book_model.pace.description}
 
 Story Essence: {summary}"""
     
@@ -216,13 +207,12 @@ Story Essence: {summary}"""
         
         research = context_data['research']
         book_model = context_data['book_model']
-        research_offset = len(research) if len(research) < 5 else 5
-        research_areas = [r.get('type', 'Unknown') for r in research[:research_offset]]
-        
-        return f"""Primary Research: {', '.join(research_areas)}
-Technology Level: {book_model.get('technology', {}).get('type', 'Unknown')}. {book_model.get('technology', {}).get('description')}
-Research Context: {book_model.get('research', [{}])[0].get('description', 'Not specified') if book_model.get('research') else 'None specified'}
-Length Constraint: {book_model.get('book', {}).get('length', 'Unknown')}"""
+        research_topics = [v[0] for v in research]
+        research_context = [v[1] for v in research if v[1]]
+        return f"""Primary Research: {', '.join(research_topics)}
+Technology Level: {book_model.technology.type}. {book_model.technology.description}
+Research Context: {', '.join(research_context)}
+Length Constraint: {book_model.book.length}"""
     
     @classmethod
     def _identify_unique_elements(cls, context_data: Dict[str, Any]) -> str:
@@ -240,19 +230,20 @@ Length Constraint: {book_model.get('book', {}).get('length', 'Unknown')}"""
             unique_elements.append(f"Features characters: {', '.join(characters[:3])}")
         
         # World elements
-        world_desc = book_model.get('world', {}).get('description', '')
+        world_desc = book_model.world.description
         if 'magic' in world_desc.lower():
             unique_elements.append("Magic system integration")
         
         # Plot elements
         plot_twists = blueprint.get('phase4', {}).get('plot_twists', [])
         if plot_twists:
-            unique_elements.append(f"Key plot elements: {', '.join(plot_twists[:2])}")
+            unique_elements.append(f"Key plot elements: {', '.join(plot_twists)}")
         
         # Research focus
-        research_focus = book_model.get('research', [])
-        if research_focus:
-            unique_elements.append(f"Research-driven: {research_focus[0].get('type', 'Unknown')}")
+        research_focus = book_model.research
+        research_topics = [v[0] for v in research_focus]
+        if research_topics:
+            unique_elements.append(f"Research-driven: {', '.join(research_topics)}")
         
         return '\n'.join(unique_elements) if unique_elements else "Standard genre conventions"
     

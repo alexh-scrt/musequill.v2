@@ -1,7 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 from dataclasses import dataclass
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Union
 import json
 
 
@@ -78,10 +78,23 @@ class ResearchQuery(BaseModel):
     topic: Optional[str] = None
     description: Optional[str] = None
     priority: Optional[str] = None
-    estimated_time: Optional[int] = None
+    estimated_time: Optional[Union[str, int]] = None
     research_methods: Optional[List[str]] = None
     key_questions: Optional[List[str]] = None
     sources_suggested: Optional[List[str]] = None
+
+    @field_validator('estimated_time', mode='before')
+    @classmethod
+    def validate_estimated_time(cls, v):
+        """Accept both string (e.g., '20 hours') and int values for estimated_time"""
+        if v is None:
+            return v
+        if isinstance(v, str):
+            return v
+        if isinstance(v, int):
+            return v
+        # Try to convert other types to string
+        return str(v)
 
     def get_query(self) -> str:
         """Get the query string for Tavily."""

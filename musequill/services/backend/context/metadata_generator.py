@@ -40,7 +40,8 @@ logger = logging.getLogger(__name__)
 class ContentTypeHint(Enum):
     """Content type hints for better LLM analysis."""
     RESEARCH = "research"
-    CHARACTER = "character" 
+    CHARACTER = "character"
+    SUMMARY = "summary"
     WORLD = "world"
     SCENE = "scene"
     STYLE = "style"
@@ -89,25 +90,94 @@ class LLMMetadataGenerator(MetadataGenerator):
         
         # Universal metadata schema template aligned with actual book models
         self.metadata_schema = {
-            "content_type": "research|character|world|scene|style|chapter|plan",
-            "content_subtype": "specific_description_string",
-            "chapter_relevance": "[list_of_numbers] or 'all'",
-            "priority": "essential|important|supporting",
-            "quality_score": "0-100",
-            "key_concepts": "list_of_up_to_7_key_terms",
-            "usage_context": "chapter_writing|planning|reference|background",
+            # CORE REQUIRED FIELDS
+            "content_type": {
+                "values": "research|character|world|scene|style|chapter|plan|summary",
+                "description": "Primary classification of content for organizational purposes",
+                "required": True
+            },
+            "content_subtype": {
+                "values": "string",
+                "description": "Specific subcategory or detailed description of content type",
+                "required": True
+            },
+            "chapter_relevance": {
+                "values": "[1, 3, 5] (array of integers) OR \"all\" (string) for entire book",
+                "description": "Specific chapter numbers as JSON array, or 'all' string for entire book",
+                "required": True
+            },
+            "priority": {
+                "values": "essential|important|supporting",
+                "description": "Importance level for book completion - essential=critical, important=helpful, supporting=nice-to-have",
+                "required": True
+            },
+            "quality_score": {
+                "values": "0-100",
+                "description": "Quality assessment score - higher means more useful/complete/accurate",
+                "required": True
+            },
+            "key_concepts": {
+                "values": "[\"term1\", \"term2\", ...] - array of strings, max 7 items",
+                "description": "Most important concepts, terms, or themes from this content as a JSON array",
+                "required": True
+            },
+            "usage_context": {
+                "values": "chapter_writing|planning|reference|background",
+                "description": "How this content should be used - chapter_writing=direct use in chapters, planning=story planning, reference=lookup, background=context",
+                "required": True
+            },
             
-            # Book model aligned fields (using actual enum values)
-            "genre_primary": f"Valid values: {self._get_enum_values(GenreType)}",
-            "genre_sub": f"Valid values: {self._get_enum_values(SubGenreType)}",
-            "audience_type": f"Valid values: {self._get_enum_values(AudienceType)}",
-            "writing_style": f"Valid values: {self._get_enum_values(WritingStyle)}",
-            "story_structure": f"Valid values: {self._get_enum_values(StoryStructure)}",
-            "world_type": f"Valid values: {self._get_enum_values(WorldType)}",
-            "conflict_type": f"Valid values: {self._get_enum_values(ConflictType)}",
-            "pov_type": f"Valid values: {self._get_enum_values(NarrativePOV)}",
-            "pace_type": f"Valid values: {self._get_enum_values(PacingStyle)}",
-            "tone_type": f"Valid values: {self._get_enum_values(ToneStyle)}"
+            # OPTIONAL BOOK MODEL FIELDS (include when applicable)
+            "genre_primary": {
+                "values": f"{self._get_enum_values(GenreType)}",
+                "description": "Primary genre classification that this content best fits",
+                "required": False
+            },
+            "genre_sub": {
+                "values": f"{self._get_enum_values(SubGenreType)}",
+                "description": "Specific subgenre for more precise classification",
+                "required": False
+            },
+            "audience_type": {
+                "values": f"{self._get_enum_values(AudienceType)}",
+                "description": "Target audience age group and reading level",
+                "required": False
+            },
+            "writing_style": {
+                "values": f"{self._get_enum_values(WritingStyle)}",
+                "description": "Writing approach and voice style that matches this content",
+                "required": False
+            },
+            "story_structure": {
+                "values": f"{self._get_enum_values(StoryStructure)}",
+                "description": "Story structure elements or patterns present in this content",
+                "required": False
+            },
+            "world_type": {
+                "values": f"{self._get_enum_values(WorldType)}",
+                "description": "Type of fictional world or setting framework",
+                "required": False
+            },
+            "conflict_type": {
+                "values": f"{self._get_enum_values(ConflictType)}",
+                "description": "Primary type of conflict or tension present",
+                "required": False
+            },
+            "pov_type": {
+                "values": f"{self._get_enum_values(NarrativePOV)}",
+                "description": "Point of view style that matches this content",
+                "required": False
+            },
+            "pace_type": {
+                "values": f"{self._get_enum_values(PacingStyle)}",
+                "description": "Pacing style or tempo that fits this content",
+                "required": False
+            },
+            "tone_type": {
+                "values": f"{self._get_enum_values(ToneStyle)}",
+                "description": "Emotional tone or mood that characterizes this content",
+                "required": False
+            }
         }
         
         # Content type specific analysis prompts
@@ -119,6 +189,7 @@ class LLMMetadataGenerator(MetadataGenerator):
             ContentTypeHint.STYLE: self._get_style_analysis_prompt(),
             ContentTypeHint.CHAPTER: self._get_chapter_analysis_prompt(),
             ContentTypeHint.PLAN: self._get_plan_analysis_prompt(),
+            ContentTypeHint.SUMMARY: self._get_summary_analysis_prompt(),
             ContentTypeHint.UNKNOWN: self._get_general_analysis_prompt()
         }
         
@@ -138,7 +209,7 @@ class LLMMetadataGenerator(MetadataGenerator):
         except Exception:
             return "enum_values_unavailable"
     
-    def generate_metadata(self, content: str, content_type: str, book_id: str) -> Dict[str, Any]:
+    async def generate_metadata(self, content: str, content_type: str, book_id: str) -> Dict[str, Any]:
         """
         Generate complete metadata using LLM analysis.
         
@@ -155,7 +226,7 @@ class LLMMetadataGenerator(MetadataGenerator):
             content_hint = self._determine_content_hint(content_type, content)
             
             # Generate metadata using LLM
-            raw_metadata = self._generate_llm_metadata(content, content_hint, book_id)
+            raw_metadata = await self._generate_llm_metadata(content, content_hint, book_id)
             
             # Validate and clean metadata
             validated_metadata = self._validate_and_clean_metadata(raw_metadata)
@@ -166,7 +237,7 @@ class LLMMetadataGenerator(MetadataGenerator):
             logger.error(f"Metadata generation failed: {e}")
             raise
     
-    def _generate_llm_metadata(self, content: str, content_hint: ContentTypeHint, book_id: str) -> Dict[str, Any]:
+    async def _generate_llm_metadata(self, content: str, content_hint: ContentTypeHint, book_id: str) -> Dict[str, Any]:
         """Generate metadata using LLM with structured prompting."""
         
         # Build the analysis prompt
@@ -178,7 +249,7 @@ class LLMMetadataGenerator(MetadataGenerator):
         # Execute LLM call with retries
         for attempt in range(self.config.retry_attempts):
             try:
-                response = self._call_llm(prompt)
+                response = await self._call_llm(prompt)
                 parsed_metadata = self._extract_json_from_response(response)
                 
                 if parsed_metadata:
@@ -209,7 +280,9 @@ class LLMMetadataGenerator(MetadataGenerator):
 - Analyze the content carefully to determine accurate metadata values
 
 **UNIVERSAL METADATA SCHEMA:**
-{json.dumps(self.metadata_schema, indent=2)}
+You must generate a JSON object with these fields. Include ALL required fields and any applicable optional fields.
+
+{self._format_schema_for_prompt()}
 
 **CONTENT TYPE SPECIFIC ANALYSIS:**
 {analysis_prompt}
@@ -223,31 +296,92 @@ Book ID: {book_id}
 **RESPONSE FORMAT:**
 Respond with ONLY a valid JSON object that follows the schema exactly. No additional text.
 
-Example response format:
+**COMPLETE BOOK-LEVEL METADATA EXAMPLES:**
+
+**Example 1 - Children's Fantasy Adventure:**
 {{
-    "content_type": "research",
-    "content_subtype": "folklore_mythology",
-    "chapter_relevance": [2, 5, 8],
-    "priority": "important",
-    "quality_score": 85,
-    "key_concepts": ["baba_yaga", "slavic_folklore", "trials", "wisdom"],
-    "usage_context": "chapter_writing"
+    "content_type": "plan",
+    "content_subtype": "complete_book_outline",
+    "chapter_relevance": "all",
+    "priority": "essential",
+    "quality_score": 92,
+    "key_concepts": ["magical_forest", "talking_animals", "friendship", "courage", "environmental_protection", "self_discovery", "adventure"],
+    "usage_context": "planning",
+    "genre_primary": "fantasy",
+    "genre_sub": "children_fantasy",
+    "audience_type": "children",
+    "writing_style": "accessible",
+    "story_structure": "heros_journey",
+    "world_type": "fantasy",
+    "conflict_type": "person_vs_supernatural",
+    "pov_type": "third_person_limited",
+    "pace_type": "medium",
+    "tone_type": "whimsical"
 }}
 
-Generate the metadata now:"""
+**Example 2 - Young Adult Contemporary Drama:**
+{{
+    "content_type": "character",
+    "content_subtype": "protagonist_development_arc",
+    "chapter_relevance": [1, 3, 5, 7, 9, 12, 15],
+    "priority": "essential",
+    "quality_score": 88,
+    "key_concepts": ["identity_crisis", "family_secrets", "coming_of_age", "social_pressure", "authentic_self"],
+    "usage_context": "chapter_writing",
+    "genre_primary": "contemporary_fiction",
+    "audience_type": "young_adult",
+    "writing_style": "conversational",
+    "story_structure": "three_act",
+    "world_type": "contemporary",
+    "conflict_type": "person_vs_society",
+    "pov_type": "first_person",
+    "pace_type": "medium",
+    "tone_type": "serious"
+}}
+
+**CRITICAL REQUIREMENTS:**
+- Always include ALL 7 required core fields: content_type, content_subtype, chapter_relevance, priority, quality_score, key_concepts, usage_context
+- Add optional book model fields when applicable to the content
+- Use lists for key_concepts (max 7 items), chapter_relevance (when specific chapters), and any multi-value fields
+- Ensure chapter_relevance is either "all" for book-wide content or [list of chapter numbers]
+- Quality_score must be 0-100 integer
+- All enum values must match exactly (case-sensitive)
+
+Generate the metadata now following these examples:"""
         
         return prompt
     
-    def _call_llm(self, prompt: str) -> str:
+    def _format_schema_for_prompt(self) -> str:
+        """Format the metadata schema for clear LLM instructions."""
+        formatted_fields = []
+        
+        for field_name, field_info in self.metadata_schema.items():
+            required_text = "**REQUIRED**" if field_info["required"] else "*optional*"
+            
+            # Add special formatting for list fields
+            list_indicator = ""
+            if field_name == "key_concepts":
+                list_indicator = " (LIST of up to 7 strings)"
+            elif field_name == "chapter_relevance":
+                list_indicator = " (LIST of integers or 'all')"
+            
+            formatted_fields.append(
+                f"  \"{field_name}\"{list_indicator}: {required_text}\n"
+                f"    - Values: {field_info['values']}\n"
+                f"    - Purpose: {field_info['description']}"
+            )
+        
+        return "\n\n".join(formatted_fields)
+    
+    async def _call_llm(self, prompt: str) -> str:
         """Execute LLM call with configured parameters."""
         try:
             # This assumes your LLM client has a generate method
             # Adjust based on your actual LLM client interface
-            response = self.llm_client.generate(
+            response = await self.llm_client.generate(
                 prompt=prompt,
                 temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                timeout=self.config.timeout_seconds
+                max_tokens=self.config.max_tokens
             )
             
             # Handle different response formats
@@ -287,137 +421,251 @@ Generate the metadata now:"""
             return None
     
     def _validate_and_clean_metadata(self, raw_metadata: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate metadata against schema and clean up values using book model enums."""
+        """
+        Validate metadata against schema and clean up values using book model enums.
         
-        # Required core fields
-        required_fields = [
-            "content_type", "content_subtype", "chapter_relevance",
-            "priority", "quality_score", "key_concepts", "usage_context"
-        ]
+        Enhanced validation features:
+        - Field existence checks with .get() for all fields
+        - Robust list handling for key_concepts and chapter_relevance
+        - Support for comma-separated strings converted to lists
+        - Single-value field cleaning for enum fields (handles accidental lists)
+        - Required field validation with fallback defaults
+        - Type coercion and range validation for numeric fields
+        """
+        
+        # Identify required fields from schema
+        required_fields = [field for field, info in self.metadata_schema.items() if info["required"]]
         
         # Check all required fields are present
-        for field in required_fields:
-            if field not in raw_metadata:
-                raise ValueError(f"Missing required field: {field}")
+        missing_fields = [field for field in required_fields if field not in raw_metadata]
+        if missing_fields:
+            logger.warning(f"Missing required fields: {missing_fields}. Using defaults.")
         
-        # Validate and clean specific fields using book model values
+        # === CORE REQUIRED FIELD VALIDATION ===
         cleaned_metadata = {}
         
         # content_type validation
-        valid_content_types = ["research", "character", "world", "scene", "style", "chapter", "plan"]
-        if raw_metadata["content_type"] not in valid_content_types:
-            logger.warning(f"Invalid content_type: {raw_metadata['content_type']}, defaulting to 'unknown'")
+        valid_content_types = ["summary", "research", "character", "world", "scene", "style", "chapter", "plan"]
+        content_type = raw_metadata.get("content_type", "unknown")
+        if str(content_type).lower() not in valid_content_types:
+            logger.warning(f"Invalid content_type: {content_type}, defaulting to 'unknown'")
             cleaned_metadata["content_type"] = "unknown"
         else:
-            cleaned_metadata["content_type"] = raw_metadata["content_type"]
+            cleaned_metadata["content_type"] = str(content_type).lower()
         
         # content_subtype - keep as string
-        cleaned_metadata["content_subtype"] = str(raw_metadata["content_subtype"])
+        cleaned_metadata["content_subtype"] = str(raw_metadata.get("content_subtype", "unspecified"))
         
-        # chapter_relevance validation
-        chapter_rel = raw_metadata["chapter_relevance"]
+        # chapter_relevance validation (handles lists, strings, and mixed formats)
+        chapter_rel = raw_metadata.get("chapter_relevance", "all")
+        
         if isinstance(chapter_rel, list):
-            # Validate list of integers
+            # Validate list of integers or strings
             cleaned_chapters = []
             for ch in chapter_rel:
                 if isinstance(ch, int) and 1 <= ch <= 50:  # Reasonable chapter range
                     cleaned_chapters.append(ch)
-            cleaned_metadata["chapter_relevance"] = cleaned_chapters if cleaned_chapters else "all"
-        elif isinstance(chapter_rel, str) and chapter_rel.lower() == "all":
-            cleaned_metadata["chapter_relevance"] = "all"
+                elif isinstance(ch, str):
+                    # Handle string representations of numbers or special values
+                    if ch.lower() in ['all', 'entire_book', 'whole_book']:
+                        cleaned_metadata["chapter_relevance"] = "all"
+                        break
+                    try:
+                        ch_num = int(ch)
+                        if 1 <= ch_num <= 50:
+                            cleaned_chapters.append(ch_num)
+                    except ValueError:
+                        continue  # Skip invalid chapter references
+            
+            # Only set list if we didn't already set "all" and have valid chapters
+            if "chapter_relevance" not in cleaned_metadata:
+                if cleaned_chapters:
+                    cleaned_metadata["chapter_relevance"] = sorted(list(set(cleaned_chapters)))  # Remove duplicates and sort
+                else:
+                    cleaned_metadata["chapter_relevance"] = "all"
+                    
+        elif isinstance(chapter_rel, str):
+            if chapter_rel.lower() in ["all", "entire_book", "whole_book"]:
+                cleaned_metadata["chapter_relevance"] = "all"
+            else:
+                # Try to parse comma-separated chapter numbers
+                try:
+                    chapters = [int(ch.strip()) for ch in chapter_rel.split(',') if ch.strip().isdigit()]
+                    valid_chapters = [ch for ch in chapters if 1 <= ch <= 50]
+                    if valid_chapters:
+                        cleaned_metadata["chapter_relevance"] = sorted(list(set(valid_chapters)))
+                    else:
+                        cleaned_metadata["chapter_relevance"] = "all"
+                except:
+                    cleaned_metadata["chapter_relevance"] = "all"
+        elif isinstance(chapter_rel, int) and 1 <= chapter_rel <= 50:
+            cleaned_metadata["chapter_relevance"] = [chapter_rel]
         else:
             cleaned_metadata["chapter_relevance"] = "all"
         
         # priority validation
         valid_priorities = ["essential", "important", "supporting"]
-        if raw_metadata["priority"] not in valid_priorities:
-            cleaned_metadata["priority"] = "supporting"
+        priority = raw_metadata.get("priority", "important")
+        if priority not in valid_priorities:
+            cleaned_metadata["priority"] = "important"
         else:
-            cleaned_metadata["priority"] = raw_metadata["priority"]
+            cleaned_metadata["priority"] = priority
         
         # quality_score validation
         try:
-            score = float(raw_metadata["quality_score"])
+            score = float(raw_metadata.get("quality_score", 50))
             cleaned_metadata["quality_score"] = max(0, min(100, int(score)))
         except (ValueError, TypeError):
             cleaned_metadata["quality_score"] = 50
         
-        # key_concepts validation
+        # key_concepts validation (handles lists, strings, and mixed formats)
         concepts = raw_metadata.get("key_concepts", [])
+        clean_concepts = []
+        
         if isinstance(concepts, list):
-            # Clean and limit to 7 concepts
-            clean_concepts = []
-            for concept in concepts[:7]:
+            # Handle list of concepts
+            for concept in concepts[:7]:  # Limit to 7 concepts max
                 if isinstance(concept, str) and concept.strip():
                     clean_concepts.append(concept.strip().lower())
-            cleaned_metadata["key_concepts"] = clean_concepts
-        else:
-            cleaned_metadata["key_concepts"] = ["unspecified"]
+                elif concept is not None:  # Handle non-string types
+                    clean_concepts.append(str(concept).strip().lower())
+        elif isinstance(concepts, str):
+            # Handle comma-separated string of concepts
+            concept_parts = [c.strip().lower() for c in concepts.split(',') if c.strip()]
+            clean_concepts.extend(concept_parts[:7])
+        
+        # Ensure we have at least one concept
+        if not clean_concepts:
+            clean_concepts = ["general"]
+        
+        cleaned_metadata["key_concepts"] = clean_concepts
         
         # usage_context validation
         valid_contexts = ["chapter_writing", "planning", "reference", "background"]
-        if raw_metadata["usage_context"] not in valid_contexts:
+        usage_context = raw_metadata.get("usage_context", "reference")
+        if usage_context not in valid_contexts:
             cleaned_metadata["usage_context"] = "reference"
         else:
-            cleaned_metadata["usage_context"] = raw_metadata["usage_context"]
+            cleaned_metadata["usage_context"] = usage_context
         
         # === BOOK MODEL ALIGNED FIELDS (Optional) ===
         
+        # === OPTIONAL BOOK MODEL FIELDS (only include when applicable) ===
+        
         # genre_primary validation (using actual GenreType enum)
-        if "genre_primary" in raw_metadata and GenreType:
-            valid_genres = self._get_enum_values_list(GenreType)
-            if raw_metadata["genre_primary"] in valid_genres:
-                cleaned_metadata["genre_primary"] = raw_metadata["genre_primary"]
+        if "genre_primary" in raw_metadata or "genre" in raw_metadata:
+            if GenreType:
+                valid_genres = self._get_enum_values_list(GenreType)
+                genre_value = raw_metadata.get("genre_primary", raw_metadata.get("genre", ""))
+                cleaned_genre = self._clean_single_value_field(genre_value, valid_genres)
+                if cleaned_genre != "unspecified":
+                    cleaned_metadata["genre_primary"] = cleaned_genre
+        
+        # genre_sub validation (using actual SubGenreType enum)
+        if "genre_sub" in raw_metadata:
+            if SubGenreType:
+                valid_subgenres = self._get_enum_values_list(SubGenreType)
+                subgenre_value = raw_metadata["genre_sub"]
+                cleaned_subgenre = self._clean_single_value_field(subgenre_value, valid_subgenres)
+                if cleaned_subgenre != "unspecified":
+                    cleaned_metadata["genre_sub"] = cleaned_subgenre
         
         # audience_type validation (using actual AudienceType enum)
-        if "audience_type" in raw_metadata and AudienceType:
-            valid_audiences = self._get_enum_values_list(AudienceType)
-            if raw_metadata["audience_type"] in valid_audiences:
-                cleaned_metadata["audience_type"] = raw_metadata["audience_type"]
+        if "audience_type" in raw_metadata:
+            if AudienceType:
+                valid_audiences = self._get_enum_values_list(AudienceType)
+                audience_value = raw_metadata["audience_type"]
+                cleaned_audience = self._clean_single_value_field(audience_value, valid_audiences)
+                if cleaned_audience != "unspecified":
+                    cleaned_metadata["audience_type"] = cleaned_audience
         
         # writing_style validation (using actual WritingStyle enum)
-        if "writing_style" in raw_metadata and WritingStyle:
-            valid_styles = self._get_enum_values_list(WritingStyle)
-            if raw_metadata["writing_style"] in valid_styles:
-                cleaned_metadata["writing_style"] = raw_metadata["writing_style"]
+        if "writing_style" in raw_metadata:
+            if WritingStyle:
+                valid_styles = self._get_enum_values_list(WritingStyle)
+                style_value = raw_metadata["writing_style"]
+                cleaned_style = self._clean_single_value_field(style_value, valid_styles)
+                if cleaned_style != "unspecified":
+                    cleaned_metadata["writing_style"] = cleaned_style
         
         # world_type validation (using actual WorldType enum)
-        if "world_type" in raw_metadata and WorldType:
-            valid_worlds = self._get_enum_values_list(WorldType)
-            if raw_metadata["world_type"] in valid_worlds:
-                cleaned_metadata["world_type"] = raw_metadata["world_type"]
+        if "world_type" in raw_metadata or "world_building" in raw_metadata:
+            if WorldType:
+                valid_worlds = self._get_enum_values_list(WorldType)
+                world_type = raw_metadata.get("world_type", raw_metadata.get("world_building", ""))
+                if world_type in valid_worlds:
+                    cleaned_metadata["world_type"] = world_type
         
         # conflict_type validation (using actual ConflictType enum)
-        if "conflict_type" in raw_metadata and ConflictType:
-            valid_conflicts = self._get_enum_values_list(ConflictType)
-            if raw_metadata["conflict_type"] in valid_conflicts:
-                cleaned_metadata["conflict_type"] = raw_metadata["conflict_type"]
+        if "conflict_type" in raw_metadata:
+            if ConflictType:
+                valid_conflicts = self._get_enum_values_list(ConflictType)
+                conflict_type = raw_metadata["conflict_type"]
+                if conflict_type in valid_conflicts:
+                    cleaned_metadata["conflict_type"] = conflict_type
         
-        # pov_type validation (using actual POVType enum)
-        if "pov_type" in raw_metadata and NarrativePOV:
-            valid_povs = self._get_enum_values_list(NarrativePOV)
-            if raw_metadata["pov_type"] in valid_povs:
-                cleaned_metadata["pov_type"] = raw_metadata["pov_type"]
+        # pov_type validation (using actual NarrativePOV enum)
+        if "pov_type" in raw_metadata:
+            if NarrativePOV:
+                valid_povs = self._get_enum_values_list(NarrativePOV)
+                pov_type = raw_metadata["pov_type"]
+                if pov_type in valid_povs:
+                    cleaned_metadata["pov_type"] = pov_type
         
         # pace_type validation (using actual PacingStyle enum)
-        if "pace_type" in raw_metadata and PacingStyle:
-            valid_paces = self._get_enum_values_list(PacingStyle)
-            if raw_metadata["pace_type"] in valid_paces:
-                cleaned_metadata["pace_type"] = raw_metadata["pace_type"]
+        if "pace_type" in raw_metadata:
+            if PacingStyle:
+                valid_paces = self._get_enum_values_list(PacingStyle)
+                pace_type = raw_metadata["pace_type"]
+                if pace_type in valid_paces:
+                    cleaned_metadata["pace_type"] = pace_type
         
         # tone_type validation (using actual ToneStyle enum)
-        if "tone_type" in raw_metadata and ToneStyle:
-            valid_tones = self._get_enum_values_list(ToneStyle)
-            if raw_metadata["tone_type"] in valid_tones:
-                cleaned_metadata["tone_type"] = raw_metadata["tone_type"]
+        if "tone_type" in raw_metadata:
+            if ToneStyle:
+                valid_tones = self._get_enum_values_list(ToneStyle)
+                tone_type = raw_metadata["tone_type"]
+                if tone_type in valid_tones:
+                    cleaned_metadata["tone_type"] = tone_type
         
         # story_structure validation (using actual StoryStructure enum)
-        if "story_structure" in raw_metadata and StoryStructure:
-            valid_structures = self._get_enum_values_list(StoryStructure)
-            if raw_metadata["story_structure"] in valid_structures:
-                cleaned_metadata["story_structure"] = raw_metadata["story_structure"]
+        if "story_structure" in raw_metadata or "story_structure_elements" in raw_metadata:
+            if StoryStructure:
+                valid_structures = self._get_enum_values_list(StoryStructure)
+                story_structure = raw_metadata.get("story_structure", raw_metadata.get("story_structure_elements", ""))
+                if story_structure in valid_structures:
+                    cleaned_metadata["story_structure"] = story_structure
+        
+        # Final validation - ensure all required fields are present
+        for field_name, field_info in self.metadata_schema.items():
+            if field_info["required"] and field_name not in cleaned_metadata:
+                # Provide defaults for missing required fields
+                defaults = {
+                    "content_type": "unknown",
+                    "content_subtype": "unspecified",
+                    "chapter_relevance": "all",
+                    "priority": "important",
+                    "quality_score": 50,
+                    "key_concepts": ["general"],
+                    "usage_context": "reference"
+                }
+                cleaned_metadata[field_name] = defaults.get(field_name, "unknown")
+                logger.warning(f"Missing required field '{field_name}', using default: {cleaned_metadata[field_name]}")
         
         return cleaned_metadata
+    
+    def _clean_single_value_field(self, raw_value: Any, valid_values: List[str], default: str = "unspecified") -> str:
+        """Clean a single-value field that might come as a list or other format."""
+        if isinstance(raw_value, list) and raw_value:
+            # If it's a list, take the first valid value
+            for value in raw_value:
+                if isinstance(value, str) and value in valid_values:
+                    return value
+            return default
+        elif isinstance(raw_value, str) and raw_value in valid_values:
+            return raw_value
+        else:
+            return default
     
     def _get_enum_values_list(self, enum_class) -> List[str]:
         """Get list of enum values for validation."""
@@ -444,7 +692,8 @@ Generate the metadata now:"""
             "scene": ContentTypeHint.SCENE,
             "style": ContentTypeHint.STYLE,
             "chapter": ContentTypeHint.CHAPTER,
-            "plan": ContentTypeHint.PLAN
+            "plan": ContentTypeHint.PLAN,
+            "summary": ContentTypeHint.SUMMARY
         }
         
         if content_type.lower() in type_mapping:
@@ -579,7 +828,18 @@ For GENERAL content analysis:
 - Consider target audience alignment (children, young_adult, adult)
 - Determine content priority (essential, important, supporting)
 """
-
+    def _get_summary_analysis_prompt(self) -> str:
+        return """
+For SUMMARY content, focus on:
+- Identify summary scope (chapter, section, character arc, plot thread)
+- Assess completeness and accuracy of key plot points (quality_score: 0-100)
+- Extract main story elements and narrative beats (key_concepts)
+- Determine which chapters or sections this summary covers (chapter_relevance)
+- Consider summary purpose (quick reference, continuity check, progress tracking)
+- Identify story structure elements (inciting incident, climax, resolution, etc.)
+- Assess usefulness for maintaining story consistency (usage_context)
+- Determine if summary captures character development and world-building elements
+"""
 
 class SimpleMetadataGenerator(MetadataGenerator):
     """
@@ -590,6 +850,7 @@ class SimpleMetadataGenerator(MetadataGenerator):
     
     def generate_metadata(self, content: str, content_type: str, book_id: str) -> Dict[str, Any]:
         """Generate basic metadata using heuristics."""
+        # Note: book_id not used in simple generator but kept for interface compatibility
         
         # Basic analysis
         word_count = len(content.split())

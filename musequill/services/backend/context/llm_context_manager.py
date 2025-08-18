@@ -20,7 +20,9 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass
 from datetime import datetime, timezone
-
+from musequill.services.backend.model import (
+    BookModelType
+)
 
 logger = logging.getLogger(__name__)
 
@@ -111,13 +113,12 @@ class LLMContextManager:
         
         logger.info("LLMContextManager initialized with pluggable modules")
     
-    def store(self, 
-              content_id: str, 
-              content: str, 
-              metadata: Optional[Dict[str, Any]] = None,
-              as_vector: bool = False,
-              content_type: str = "unknown",
-              book_id: str = "default") -> bool:
+    async def store(self,
+            book_id: str,
+            content_id: str, 
+            content: str, 
+            metadata: BookModelType,
+            as_vector: bool = False) -> bool:
         """
         Store content with explicit storage strategy control.
         
@@ -134,26 +135,26 @@ class LLMContextManager:
         """
         try:
             # Generate metadata if not provided
-            if metadata is None:
-                metadata = self._generate_metadata_with_fallback(content, content_type, book_id)
+            # if metadata is None:
+            #     metadata = await self._generate_metadata_with_fallback(content, content_type, book_id)
             
-            # Add system-generated metadata fields
-            complete_metadata = self._enrich_metadata(metadata, content_id, content, book_id)
+            # # Add system-generated metadata fields
+            # complete_metadata = self._enrich_metadata(metadata, content_id, content, book_id)
             
             # Parse content if needed
-            parsed_content = self._parse_content(content, complete_metadata.get("format", "text"))
+            parsed_content = self._parse_content(content, "text")
             
             # Execute storage strategy
             if as_vector:
-                return self._store_vector_content(content_id, parsed_content, complete_metadata)
+                return self._store_vector_content(book_id, content_id, parsed_content, metadata)
             else:
-                return self._store_raw_content(content_id, parsed_content, complete_metadata)
+                return self._store_raw_content(book_id, content_id, parsed_content, metadata)
                 
         except Exception as e:
             logger.error(f"Failed to store content {content_id}: {e}")
             return False
     
-    def retrieve(self, 
+    def retrieve(self,
                  query: Optional[str] = None,
                  exact_ids: Optional[List[str]] = None,
                  filters: Optional[Dict[str, Any]] = None,
@@ -280,11 +281,11 @@ class LLMContextManager:
     
     # === PRIVATE HELPER METHODS ===
     
-    def _generate_metadata_with_fallback(self, content: str, content_type: str, book_id: str) -> Dict[str, Any]:
+    async def _generate_metadata_with_fallback(self, content: str, content_type: str, book_id: str) -> Dict[str, Any]:
         """Generate metadata with strict validation and fallback."""
         try:
             # Attempt LLM metadata generation
-            metadata = self.metadata_generator.generate_metadata(content, content_type, book_id)
+            metadata = await self.metadata_generator.generate_metadata(content, content_type, book_id)
             
             # Strict validation
             if self._validate_metadata(metadata):
@@ -337,22 +338,23 @@ class LLMContextManager:
             logger.warning(f"Content parsing failed: {e}, using raw content")
             return content
     
-    def _store_vector_content(self, content_id: str, content: str, metadata: Dict[str, Any]) -> bool:
+    def _store_vector_content(self, book_id:str, content_id: str, content: str, metadata: BookModelType) -> bool:
         """Store content in both ChromaDB and Redis."""
         try:
             # Store in ChromaDB for vector search
             self.vector_store.add(
                 documents=[content],
                 metadatas=[metadata],
-                ids=[content_id]
+                ids=[book_id, content_id]
             )
             
             # Store metadata in Redis for fast access
             redis_key = f"content:{content_id}"
             redis_data = {
+                "book_id": book_id,
                 "content_id": content_id,
                 "content": content,
-                "metadata": metadata,
+                "metadata": metadata.model_dump(),
                 "storage_type": "vector"
             }
             self.redis_store.setex(redis_key, 86400, json.dumps(redis_data))  # 24h TTL
@@ -364,14 +366,15 @@ class LLMContextManager:
             logger.error(f"Vector storage failed for {content_id}: {e}")
             return False
     
-    def _store_raw_content(self, content_id: str, content: str, metadata: Dict[str, Any]) -> bool:
+    def _store_raw_content(self, book_id:str, content_id: str, content: str, metadata: BookModelType) -> bool:
         """Store content in Redis only."""
         try:
             redis_key = f"content:{content_id}"
             redis_data = {
+                "book_id": book_id,
                 "content_id": content_id,
                 "content": content,
-                "metadata": metadata,
+                "metadata": metadata.model_dump(),
                 "storage_type": "raw"
             }
             self.redis_store.set(redis_key, json.dumps(redis_data))

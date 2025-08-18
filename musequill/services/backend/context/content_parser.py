@@ -30,12 +30,12 @@ try:
     from musequill.models.book.world import WorldType
     from musequill.models.book.story_structure import StoryStructure
     from musequill.models.book.conflict import ConflictType
-    from musequill.models.book.pov import POVType
-    from musequill.models.book.pace import PaceType
-    from musequill.models.book.tone import ToneType
+    from musequill.models.book.narrative_pov import NarrativePOV
+    from musequill.models.book.pacing_style import PacingStyle
+    from musequill.models.book.tone_style import ToneStyle
     from musequill.models.book.research import ResearchType
-    from musequill.models.book.technology import TechnologyType
-    from musequill.models.book.personality import PersonalityType
+    from musequill.models.book.technology import TechnologyLevel
+    from musequill.models.book.personality import PersonalityTrait
     from musequill.models.book.plot import PlotType
 except ImportError as e:
     logging.warning(f"Could not import book model enums: {e}")
@@ -343,8 +343,8 @@ class BookContentParser(ContentParser):
                 if "pov" in data:
                     pov_data = data["pov"]
                     pov_type = pov_data.get("type")
-                    if pov_type and POVType:
-                        valid_povs = self._get_enum_values_list(POVType)
+                    if pov_type and NarrativePOV:
+                        valid_povs = self._get_enum_values_list(NarrativePOV)
                         if pov_type.upper() in [p.upper() for p in valid_povs]:
                             metadata["pov_type"] = pov_type
                 
@@ -352,8 +352,8 @@ class BookContentParser(ContentParser):
                 if "pace" in data:
                     pace_data = data["pace"]
                     pace_type = pace_data.get("type")
-                    if pace_type and PaceType:
-                        valid_paces = self._get_enum_values_list(PaceType)
+                    if pace_type and PacingStyle:
+                        valid_paces = self._get_enum_values_list(PacingStyle)
                         if pace_type.upper() in [p.upper() for p in valid_paces]:
                             metadata["pace_type"] = pace_type
                 
@@ -361,8 +361,8 @@ class BookContentParser(ContentParser):
                 if "tone" in data:
                     tone_data = data["tone"]
                     tone_type = tone_data.get("type")
-                    if tone_type and ToneType:
-                        valid_tones = self._get_enum_values_list(ToneType)
+                    if tone_type and ToneStyle:
+                        valid_tones = self._get_enum_values_list(ToneStyle)
                         if tone_type.upper() in [t.upper() for t in valid_tones]:
                             metadata["tone_type"] = tone_type
                 
@@ -578,13 +578,13 @@ class BookContentParser(ContentParser):
                 metadata["detected_conflict_type"] = detected_conflict
         
         # Detect tone elements
-        if ToneType:
-            detected_tone = self._detect_enum_value_in_text(text, ToneType)
+        if ToneStyle:
+            detected_tone = self._detect_enum_value_in_text(text, ToneStyle)
             if detected_tone:
                 metadata["detected_tone_type"] = detected_tone
         
         # Detect pace indicators
-        if PaceType:
+        if PacingStyle:
             # Check for pace-related keywords
             pace_keywords = {
                 "slow": ["slow", "leisurely", "gradual", "gentle"],
@@ -592,7 +592,7 @@ class BookContentParser(ContentParser):
                 "fast": ["fast", "rapid", "quick", "intense", "urgent"]
             }
             
-            for pace_type in self._get_enum_values_list(PaceType):
+            for pace_type in self._get_enum_values_list(PacingStyle):
                 pace_lower = pace_type.lower()
                 if pace_lower in pace_keywords:
                     if any(keyword in text for keyword in pace_keywords[pace_lower]):

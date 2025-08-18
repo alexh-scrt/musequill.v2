@@ -211,16 +211,16 @@ You are an expert book planning consultant tasked with creating a detailed, acti
         instructions += "Create a comprehensive book writing plan that addresses each of the following areas based on the provided project information:\n\n"
         
         phase_instructions = {
-            'phase1': "## 1. FOUNDATION PLANNING\nBased on the book concept information, establish:",
-            'phase2': "## 2. STRUCTURAL BLUEPRINT\nUsing the story structure details, design:",
-            'phase3': "## 3. WORLD DESIGN FRAMEWORK\nFrom the world-building information, develop:",
-            'phase4': "## 4. CHARACTER ARCHITECTURE\nUsing character development details, create:",
-            'phase5': "## 5. WRITING METHODOLOGY\nBased on style preferences, establish:",
-            'phase6': "## 6. REVISION STRATEGY\nFrom editing requirements, plan:",
-            'phase7': "## 7. PUBLICATION ROADMAP\nUsing market information, design:"
+            'phase_1': "## 1. FOUNDATION PLANNING\nBased on the book concept information, establish:",
+            'phase_2': "## 2. STRUCTURAL BLUEPRINT\nUsing the story structure details, design:",
+            'phase_3': "## 3. WORLD DESIGN FRAMEWORK\nFrom the world-building information, develop:",
+            'phase_4': "## 4. CHARACTER ARCHITECTURE\nUsing character development details, create:",
+            'phase_5': "## 5. WRITING METHODOLOGY\nBased on style preferences, establish:",
+            'phase_6': "## 6. REVISION STRATEGY\nFrom editing requirements, plan:",
+            'phase_7': "## 7. PUBLICATION ROADMAP\nUsing market information, design:"
         }
-        
-        for phase_key, phase_data in processed_data['phases'].items():
+        phases = processed_data['phases']['blueprint']['elements']
+        for phase_key, phase_data in phases.items():
             if phase_key in phase_instructions:
                 instructions += f"{phase_instructions[phase_key]}\n"
                 instructions += self._build_phase_specific_instructions(phase_key, phase_data)
@@ -231,51 +231,75 @@ You are an expert book planning consultant tasked with creating a detailed, acti
         return instructions
     
     def _build_phase_specific_instructions(self, phase_key: str, phase_data: Dict[str, Any]) -> str:
-        """Build phase-specific planning instructions."""
+        """Build phase-specific planning instructions using actual phase data."""
+        # Extract elements from the phase data
+        # elements = phase_data.get('elements', {})
+        
+        # Base template for the phase
+        instructions = self._get_base_phase_template(phase_key)
+        
+        # Add specific elements from the actual data
+        # if elements:
+        instructions += f"\n**Specific Elements to Address:**\n"
+        for key, value in phase_data.items():
+            if key != 'additional':  # Skip the additional catch-all
+                instructions += f"- {key.replace('_', ' ').title()}: {value}\n"
+        
+        # Add additional elements if they exist
+        # if 'additional' in elements and elements['additional']:
+        #     instructions += f"\n**Additional Considerations:**\n"
+        #     for key, value in elements['additional'].items():
+        #         instructions += f"- {key.replace('_', ' ').title()}: {value}\n"
+        
+        instructions += "\n"
+        return instructions
+    
+    def _get_base_phase_template(self, phase_key: str) -> str:
+        """Get the base template for a phase."""
         phase_templates = {
-            'phase1': """
+            'phase_1': """
 - Complete project scope and objectives
 - Target audience analysis and requirements
 - Genre conventions and reader expectations
 - Success metrics and completion criteria
 - Timeline and milestone planning
 """,
-            'phase2': """
+            'phase_2': """
 - Detailed plot outline with major story beats
 - Act/chapter breakdown with scene summaries
 - Conflict escalation and resolution points
 - Pacing strategy throughout the narrative
 - Subplot integration and character arc alignment
 """,
-            'phase3': """
+            'phase_3': """
 - Comprehensive world bible with rules and limitations
 - Setting descriptions and atmospheric elements
 - Cultural, historical, and technological frameworks
 - Magic/technology system documentation
 - Consistency guidelines for world elements
 """,
-            'phase4': """
+            'phase_4': """
 - Complete character profiles with backstories
 - Character development arcs and transformation points
 - Relationship dynamics and interaction patterns
 - Dialogue voice and speech patterns for each character
 - Character motivation and goal hierarchies
 """,
-            'phase5': """
+            'phase_5': """
 - Voice and tone consistency guidelines
 - Narrative perspective and point-of-view strategy
 - Pacing techniques and scene transition methods
 - Language level and vocabulary considerations
 - Style guide for maintaining consistency
 """,
-            'phase6': """
+            'phase_6': """
 - Multi-stage revision process with specific focus areas
 - Self-editing checklists and quality benchmarks
 - Beta reader recruitment and feedback integration
 - Professional editing timeline and budget
 - Manuscript polishing and final preparation steps
 """,
-            'phase7': """
+            'phase_7': """
 - Market positioning and competitive analysis
 - Publishing pathway selection (traditional/self/hybrid)
 - Marketing strategy and promotional timeline

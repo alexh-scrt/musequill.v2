@@ -7,9 +7,16 @@ for Llama 3.3-8B to create a comprehensive book writing blueprint in JSON format
 """
 
 import json
+import re
 from typing import Dict, Any
 from musequill.services.backend.model.book import BookModelType
 from .target_json_schema import TARGET_JSON_SCHEMA, EXPECTED_OUTPUT
+
+CODE_FENCE_RE = re.compile(
+    r"^\s*```(?:json)?\s*\n(?P<body>.*)\n```\s*$",
+    re.DOTALL | re.IGNORECASE,
+)
+
 
 class BlueprintPromptGenerator:
     """Generates optimized prompts for book writing blueprint creation with JSON output."""
@@ -17,7 +24,7 @@ class BlueprintPromptGenerator:
     SYSTEM_PROMPT = """You are an expert book writing consultant and publishing strategist. Your task is to create a comprehensive, actionable book writing blueprint based on the provided book template data. You must analyze all elements systematically and provide concrete, step-by-step guidance that transforms the template into a complete writing plan.
 
 ## CRITICAL OUTPUT REQUIREMENT
-You MUST respond with a valid JSON object following the exact structure provided in the JSON Schema below. Do not include any text before or after the JSON. Do not use markdown code blocks. Return only pure JSON.
+You MUST respond with a valid JSON object that adheres to the TARGET JSON SCHEMA following the exact structure provided in the JSON Schema below. Do not include any text before or after the JSON. Do not use markdown code blocks. Return only pure JSON.
 
 ## Response Guidelines
 
@@ -83,64 +90,78 @@ Remember: Populate ALL fields in the JSON schema with meaningful, specific conte
         template_summary = cls._create_template_summary(book_model)
         
         # Convert to clean JSON for inclusion
-        template_json = json.dumps(book_model.dict(), indent=2, ensure_ascii=False)
+        template_json = json.dumps(book_model.model_dump(), indent=2, ensure_ascii=False)
         
         # Construct the complete prompt
         complete_prompt = f"""{cls.SYSTEM_PROMPT}
 
-## JSON Output Schema
 
 # ABSOLUTE RULES:
-- ❗ Output MUST be valid JSON that conforms to the structure below
+- ❗ Output MUST be valid JSON that conforms to the JSON output schema
 - ❗ Do NOT include any explanation, comment, or markdown
 - ❗ Populate **every field** in the schema with SPECIFIC, USEFUL data
 
+# CRITICAL STRUCTURE REQUIREMENTS:
+- 🚨 MUST include "title" field at ROOT level (not inside blueprint)
+- 🚨 MUST include "author" field at ROOT level (not inside blueprint) 
+- 🚨 MUST include "blueprint" object containing all phases
+- 🚨 Use exact field names: "phase_1", "phase_2", etc. (NOT "phase1")
+
 # Output Format Requirements:
-- 🔹 Pure JSON object
-- 🔹 All fields filled
+- 🔹 Pure JSON object starting with {{"title": "...", "author": "...", "blueprint": {{...}}}}
+- 🔹 All fields filled with meaningful content
 - 🔹 NO markdown/code blocks
 - 🔹 NO extra commentary
 
 # DO NOT DO:
-- ❌ Do not preface with “Here’s your JSON:”
+- ❌ Do not preface with "Here's your JSON:"
 - ❌ Do not wrap output in triple backticks
 - ❌ Do not include schema again
 - ❌ Do not repeat the template data
+- ❌ Do not put "title" or "author" inside the "blueprint" object
 
-
-🛑 Your ONLY job is to produce a JSON object.
+🛑 Your ONLY job is to produce a JSON object compliant with the JSON output schema.
 🚫 Do NOT interpret. Do NOT reformat. Do NOT include text, commentary, or labels.
 ✅ Your JSON MUST match the structure and field names EXACTLY.
 
-🔍 Common Mistakes to Avoid:
-- Using `phase1` instead of `phase_1`
-- Skipping the `"blueprint"` root node
-- Returning `"target_audience"` as a string instead of a nested object
+🔍 MOST COMMON VALIDATION ERRORS TO AVOID:
+1. Missing "title" field at root level - THIS IS REQUIRED
+2. Missing "author" field at root level - THIS IS REQUIRED  
+3. Using "phase1" instead of "phase_1" 
+4. Missing the "blueprint" root object
+5. Putting title/author inside blueprint instead of at root level
 
-You MUST respond with a JSON object that follows this exact structure:
+You MUST respond with a JSON object that follows this exact json output schema:
 
-```json
+## TARGET JSON SCHEMA
+
 {TARGET_JSON_SCHEMA}
-```
-## Here is a correct example output:
-```json
+
+## EXAMPLE OUTPUT THAT MATCHES TARGET JSON SCHEMA
+
 {EXPECTED_OUTPUT}
-```
-## Book Template Summary
+
+## BOOK TEMPLATE SUMMARY
 
 {template_summary}
 
-## Blueprint Generation Task
+## BLUEPRINT GENERATION TASK
 
 {cls.BLUEPRINT_INSTRUCTIONS}
 
 ## Book Template Data
 
-
 {template_json}
 
+## FINAL INSTRUCTIONS FOR JSON GENERATION:
 
-Generate the complete book writing blueprint now as a valid JSON object, addressing each phase systematically and providing specific, actionable guidance based on this template's unique characteristics. Return ONLY the JSON object with no additional text or formatting.
+1. Extract the book title from book.title in the template data above for the ROOT "title" field
+2. Extract the author name from book.author in the template data above for the ROOT "author" field  
+3. Create the "blueprint" object with all 7 phases (phase_1 through phase_7)
+4. Fill every field in every phase with specific, actionable content based on the template data
+5. Ensure your output starts with: {{"title": "ACTUAL_BOOK_TITLE", "author": "ACTUAL_AUTHOR_NAME", "blueprint": {{...}}}}
+
+Generate the complete book writing blueprint now as a valid JSON object matching the TARGET JSON SCHEMA exactly. Return ONLY the JSON object with no additional text or formatting.
 
 """
 
@@ -282,6 +303,9 @@ Generate the complete book writing blueprint now as a valid JSON object, address
             Tuple of (is_valid, parsed_json_or_error_message)
         """
         try:
+
+            m = CODE_FENCE_RE.match(response.strip())
+            response = m.group("body") if m else response
             # Try to parse the JSON
             parsed_json = json.loads(response.strip())
             
@@ -299,6 +323,8 @@ Generate the complete book writing blueprint now as a valid JSON object, address
                 for phase in blueprint_phases:
                     if phase not in parsed_json["blueprint"]:
                         return False, f"Missing blueprint phase: {phase}"
+                    if not isinstance(parsed_json["blueprint"][phase], dict):
+                        return False, f"{phase} must be an object (dict)"
             
             return True, parsed_json
             
