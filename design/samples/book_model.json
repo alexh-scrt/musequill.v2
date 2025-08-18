@@ -1,0 +1,76 @@
+{
+  "book": {
+    "title": "The Enchanted Forest of Peter",
+    "author": "Joseph Campbell",
+    "idea": "Write a whimsical and richly imaginative children's fantasy story centered around a small but brave and curious bunny named Peter. The story should begin in a peaceful meadow where Peter lives a simple life, but soon his adventurous nature leads him beyond the safety of his home and into a mysterious, enchanted forest. The forest should be atmospheric, blending wonder and mild danger, and populated with creatures and figures drawn from Slavic mythology—including, but not limited to, Baba Yaga, Leshy, Domovoi, and Rusalka. Each encounter should serve as both a narrative milestone and a learning moment for Peter, shaping his character through themes of courage, kindness, wit, and self-discovery.",
+    "type": "novelle",
+    "length": "40,000-60,000 words",
+    "language": "english"
+  },
+  "genre": {
+    "primary": {
+      "type": "children",
+      "description": "A story that is appropriate for children and is not too complex or long."
+    },
+    "sub": {
+      "type": "children book",
+      "description": "A story that is appropriate for children and is not too complex or long."
+    }
+  },
+  "audience": {
+    "type": "children",
+    "age": "7-12"
+  },
+  "writing_style": "children friendly",
+  "structure": {
+    "type": "Hero's Journey",
+    "description": "Joseph Campbell's monomyth pattern with departure, initiation, and return"
+  },
+  "characters": {
+    "protagonist": "The main character who drives the story forward, faces the central conflict, and undergoes the most significant character development throughout the narrative.",
+    "narrator": "The character or voice that tells the story, who may or may not be a character within the narrative itself."
+  },
+  "conflict": {
+    "type": "person vs supernatural",
+    "description": "The protagonist faces a supernatural entity or forces a choice that affects the story's outcome."
+  },
+  "pov": {
+    "type": "third person objective",
+    "description": "Narrator reports only observable actions and dialogue without revealing internal thoughts or feelings of any character, like a camera recording events."
+  },
+  "personality": {
+    "type": "charismatic",
+    "description": "Has a compelling charm and natural ability to attract, influence, and inspire others through personal magnetism."
+  },
+  "plot": {
+    "type": "voyage and return",
+    "description": "A story of exploration and discovery where the protagonist travels to a strange, unfamiliar world or situation, experiences adventures and learns important lessons, then returns home transformed by their experience with new wisdom or perspective."
+  },
+  "pace": {
+    "type": "fast paced",
+    "description": "Quick, energetic narrative flow with rapid scene changes and minimal downtime"
+  },
+  "research": [
+    {
+      "type": "folklore",
+      "description": "Research into folk tales, traditional stories, and cultural narratives",
+      "context": true
+    }
+  ],
+  "technology": {
+    "type": "enlightment",
+    "description": "Scientific method, early industry, political philosophy, improved medicine, and social reform movements."
+  },
+  "tone": {
+    "type": "witty",
+    "description": "Light-hearted, humorous, and engaging"
+  },
+  "world": {
+    "type": "high fantasy",
+    "description": "Completely fictional worlds with their own geography, cultures, magic systems, and often non-human races. Magic is prevalent and accepted as part of reality."
+  },
+  "style": {
+    "type": "conversational",
+    "description": "Natural, speech-like quality that feels like a personal conversation between writer and reader."
+  }
+}

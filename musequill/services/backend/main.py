@@ -566,7 +566,7 @@ Examples:
             for query_type, result in detailed_results.items():
                 tavily_answers = []
                 for sr in cast(Iterable[SearchResult], result.search_results):
-                    tavily_answers.append(sr.tavily_answer)
+                    tavily_answers.append(f'{sr.title}: {sr.content}')
                 extracted_data[query_type] = tavily_answers
             return extracted_data
         
@@ -628,6 +628,13 @@ Examples:
             sys.exit(1)
         logger.info(f'📝  Book DNA stored to {ctx_mgr.__class__.__name__}')
 
+        book_dna_filename = generate_filename(
+            output_path,
+            prefix="book-dna",
+            extension="md"
+        )
+        with open(book_dna_filename, 'w', encoding='utf-8') as f:
+            f.write(book_dna)
 
 
         # After the deailed research is done, we can now generate the book chapter plan
