@@ -41,10 +41,6 @@ from musequill.services.backend.prompts import (
     BookDNAInputs,
     BookDNAPromptGenerator
 )
-from musequill.services.backend.model import (
-    BookModelType,
-    BookBlueprint,
-)
 from musequill.services.backend.llm.ollama_client import (
     create_llm_service,
     LLMService
@@ -66,9 +62,6 @@ from musequill.services.backend.researcher import (
 
 from musequill.services.backend.context import (
     LLMContextManager,
-    create_metadata_generator,
-    MetadataGenerator,
-    MetadataPromptConfig,
 )
 
 from musequill.services.backend.integration import (
@@ -210,8 +203,6 @@ async def main():
     config = get_settings()
     start = time.perf_counter()
     logger.info(f"✅  Loaded configuration: {config.model_dump_json(indent=2)}")
-
-    """Main function to handle command line arguments and orchestrate the process."""
     parser = argparse.ArgumentParser(
         description="Load and convert JSON templates to BookModelType",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -275,9 +266,7 @@ Examples:
     if args.output:
         try:
             output_path = Path('musequill/services/backend/outputs')
-            
-            # Ensure output directory exists
-            output_path.parent.mkdir(exist_ok=True)
+            output_path.mkdir(parents=True, exist_ok=True)
             book_model_filename = generate_filename(
                 output_path,
                 prefix="book_model",
@@ -301,6 +290,8 @@ Examples:
 
         recommended_model_settings: Optional[dict] = None
         llm_service:LLMService = create_llm_service()
+        output_path = Path('musequill/services/backend/outputs')
+        output_path.mkdir(parents=True, exist_ok=True)
 
         # BOOK SUMMARY
         logger.info("\n📚 Generating Book Summary...")
@@ -308,7 +299,6 @@ Examples:
         book_data = book_model.model_dump()
         prompt = bspg.generate_prompt(book_data)
 
-        output_path.parent.mkdir(exist_ok=True)
         prompt_filename = generate_filename(
             output_path,
             prefix="summary-prompt",
@@ -325,16 +315,6 @@ Examples:
 
         logger.info(f"\n📝 Book Summary Prompt:\n{prompt_str}")
 
-        # print("\n" + "="*50)
-        # print("PROMPT STATISTICS")
-        # print("="*50)
-        # for key, value in stats.items():
-        #     if isinstance(value, dict):
-        #         print(f"{key}:")
-        #         for sub_key, sub_value in value.items():
-        #             print(f"  {sub_key}: {sub_value}")
-        #     else:
-        #         print(f"{key}: {value}")
 
 
         recommended_model_settings = stats.get('recommended_model_settings')
@@ -366,7 +346,6 @@ Examples:
         if response.get('timelapse', 0):
             print(f"⏱️  LLM Response Time: {seconds_to_time_string(response['timelapse'])}")
         # save book summary
-        output_path.parent.mkdir(exist_ok=True)
         response_filename = generate_filename(
             output_path,
             prefix="summary-response",
@@ -430,7 +409,6 @@ Examples:
                 await asyncio.sleep(1)
 
         json_payload = extract_json_from_response(response['response'])
-        output_path.parent.mkdir(exist_ok=True)
         response_filename = generate_filename(
             output_path,
             prefix="blueprint-response",
@@ -450,12 +428,6 @@ Examples:
             logger.error("🔴 Failed to store book summary")
             sys.exit(1)
         logger.info(f'📝  Book blueprint stored to {ctx_mgr.__class__.__name__}')
-        # book_blueprint = ctx_mgr.retrieve(
-        #     exact_ids=['book_blueprint'],
-        #     filters={
-        #         'book_id': book_id
-        #     }
-        # )
 
         # Planning
         logger.info("\n📚 Generating Book Planning...")
@@ -470,16 +442,6 @@ Examples:
         ppg.save_prompt_to_file(prompt, prompt_filename)
         stats = ppg.get_prompt_stats(prompt)
         recommended_model_settings = stats.get('recommended_model_settings')
-        # print("\n" + "="*50)
-        # print("PROMPT STATISTICS")
-        # print("="*50)
-        # for key, value in stats.items():
-        #     if isinstance(value, dict):
-        #         print(f"{key}:")
-        #         for sub_key, sub_value in value.items():
-        #             print(f"  {sub_key}: {sub_value}")
-        #     else:
-        #         print(f"{key}: {value}")
         if recommended_model_settings:
             logger.info(f'ℹ️  Using recommended model settings:\n{json.dumps(recommended_model_settings, indent=2)}\n')
             # update the llm with the prompt recommended settings
@@ -637,56 +599,11 @@ Examples:
             f.write(book_dna)
 
 
-        # After the deailed research is done, we can now generate the book chapter plan
         stop = time.perf_counter()
         lapse = tick(start, stop)
         print(f'DONE in {lapse}')
     except Exception as e:
         logger.error(f"Error: {e}")
-
-async def book_dna_fn():
-
-    ctx_mgr = await create_llm_context_manager()
-
-    
-    start = time.perf_counter()
-    config = get_settings()
-    with open('musequill/services/backend/outputs/book_model-20250801-202621.json', 'r', encoding='utf-8') as f:
-        book_model = json.load(f)
-    with open('musequill/services/backend/outputs/blueprint-response-20250801-202936.json', 'r', encoding='utf-8') as f:
-        book_blueprint = json.load(f)
-    with open('musequill/services/backend/outputs/research-result-20250801-203850.json', 'r', encoding='utf-8') as f:
-        research_results = json.load(f)
-    with open('musequill/services/backend/outputs/summary-response-20250801-202749.md', 'r', encoding='utf-8') as f:
-        book_summary = f.read()
-
-    research_types: List[Dict[str, Any]] = []
-    for query in research_results['updated_queries']:
-        research_types.append({'type':query['topic']})
-    book_id: str = str(uuid4())
-    dna_input = BookDNAInputs(**{
-        'book_model': book_model,
-        'book_blueprint': book_blueprint,
-        'research_topics': research_types,
-        'book_summary': book_summary,
-        'book_id': book_id
-    })
-
-    prompt = BookDNAPromptGenerator.generate_dna_prompt(dna_input)
-    llm_service = create_llm_service()
-    await llm_service.update_default_parameters(
-        temperature=1.3,
-        max_tokens=800,
-        top_k=10,
-        top_p=0.9,
-        repeat_penalty=1.1
-    )
-    logger.info("LLM Service initialized successfully")
-    response = await llm_service.generate([prompt])
-    val_rep = BookDNAPromptGenerator.validate_dna_output(response['response'])
-    print(json.dumps(val_rep, indent=2, ensure_ascii=False))
-    end = time.perf_counter()
-    print(f'done : {tick(start, end)}')
 
 if __name__ == "__main__":
     asyncio.run(main())
