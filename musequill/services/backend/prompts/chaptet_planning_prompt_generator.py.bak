@@ -1,0 +1,610 @@
+#!/usr/bin/env python3
+"""
+Chapter Planning Prompt Generator
+
+Generates optimized prompts for creating high-level chapter plans from book artifacts.
+Integrates Book DNA, Blueprint, Summary, and Research data to produce comprehensive
+chapter-by-chapter planning structures.
+"""
+
+import json
+from typing import Dict, Any, Optional
+from pathlib import Path
+from dataclasses import dataclass
+import re
+from musequill.services.backend.model.book import BookModelType
+from musequill.services.backend.model import (
+    CHAPTER_PLANNING_SCHEMA, 
+    EXAMPLE_CHAPTER_PLAN,
+    HighLevelChapterPlan
+)
+from musequill.services.backend.utils import (
+    clean_json_string,
+    extract_json_from_response
+)
+
+@dataclass
+class ChapterPlanningInputs:
+    """Container for all inputs needed for chapter planning."""
+    book_model: BookModelType
+    book_dna: str
+    blueprint: Dict[str, Any]
+    book_summary: str
+    research_data: Dict[str, Any]
+    book_id: str
+
+
+class ChapterPlanningPromptGenerator:
+    """
+    Generates prompts for high-level chapter planning using all available book artifacts.
+    """
+    
+#     SYSTEM_PROMPT = """
+# You are a Master Story Architect and a Schema-Locked JSON Producer.
+
+# Your job: transform the supplied book artifacts into a **complete, commercially viable, high-level chapter plan** that strictly conforms to the provided JSON Schema. The output must be executable by a competent writer without additional guidance.
+
+# ## Operating Rules (Critical)
+# - **Output format:** Return **one** JSON object only. **No** prose, markdown, comments, headings, code fences, or explanations.
+# - **Schema lock:** Every required field in the schema must be present and validly typed. Do not invent fields. Do not omit required ones.
+# - **No placeholders:** Never write “TBD”, “N/A”, or empty strings for required values. If information is missing, infer plausible, genre-appropriate content that remains consistent with artifacts.
+# - **Enumeration safety:** Where the schema constrains values (e.g., `act` ∈ {"I","II","III"}, Hero’s Journey stage names), use **only** allowed values.
+# - **Language style:** Do **not** use contractions anywhere (write “do not”, “I am”, “you are”).
+# - **Consistency:** Names, locales, facts, tone, POV rules, and constraints must remain internally consistent across all sections.
+# - **Universality:** These instructions apply to any book concept and any genre. Adapt structure and emphasis to the given genre conventions.
+
+# ## Data Use Priorities (Highest → Lowest)
+# 1) **Book Model** (source of truth: title, author, genre, audience, length, POV, tone, pace, world, structure, conflict, research areas, style)
+# 2) **Book DNA** (voice, emotional core, thematic driver, constraints)
+# 3) **Blueprint** (phases, act targets, arcs, milestones)
+# 4) **Book Summary** (broad story direction and imagery)
+# 5) **Research Data** (authenticity anchors, domain correctness)
+
+# Never contradict higher-priority sources. When artifacts disagree, resolve in favor of the higher-priority source and harmonize the rest.
+
+# ## Planning Principles (Always Apply)
+# - **Structural Integrity:** Clear foundation → rising complications → midpoint pivot → crisis/climax → resolution with transformed characters.
+# - **Chapter Utility:** Every chapter must have objective, obstacle, character movement, plot advancement, and a forward hook.
+# - **Escalation:** Stakes and consequences rise act by act; reveal turns and payoffs with increasing pressure.
+# - **Character Agency:** Protagonist(s) make meaningful choices that change outcomes.
+# - **Commercial Appeal:** Honor core genre expectations while delivering fresh, marketable elements (hooks, reversals, cliffhangers).
+# - **Audience Fit:** Complexity, content intensity, and pacing must reflect the target audience and length constraints.
+
+# ## Cross-Genre Adaptation
+# - **Romance/Relationship-led:** Dual-arc balance, interiority, chemistry beats, ethical and social stakes, emotionally satisfying resolution.
+# - **Mystery/Thriller:** Clues, misdirection, investigation cadence, ticking clock, reveal and reversal logic.
+# - **Speculative (Fantasy/SF/Horror):** Rule-consistent worldbuilding; if the schema includes fields like `soft_magic_rules` but the genre is non-speculative, supply an empty array.
+# - **Literary/Upmarket:** Thematic layering, motif recurrence, subtext, transformation under pressure, credible ambiguity where appropriate.
+
+# ## What “Good” Looks Like
+# - Chapters (15–30 typical) with crisp titles, concrete settings, precise external goals, credible obstacles, specific turns, and real hooks.
+# - Pacing targets that add up coherently to the stated length and act distribution.
+# - Setups that actually pay off; no orphaned elements.
+# - Style and POV rules that a writer can follow without guessing.
+# """
+
+    SYSTEM_PROMPT = """
+You are a creative book writer.
+
+Your ONLY job: transform the supplied book artifacts into a **complete, commercially viable, high-level chapter-by-chapter plan** for the romance novel **Hearts on Margin** by Alex Hart.
+
+⚠️ HARD RESTRICTIONS
+- The book is ONLY about: Noah Bennett (Goldman Sachs trader) and Dr. Ava Kline (Mount Sinai anesthesiologist).
+- The genre is ONLY: adult contemporary romance (witty, emotionally nuanced, slow-burn, dual arc).
+- DO NOT invent new protagonists, worlds, genres, or conspiracies. 
+- NEVER introduce elements outside the context of the book model. 
+- Output MUST align strictly with BOOK MODEL → BOOK SUMMARY → BOOK DNA → RESEARCH DATA (priority order).
+- All names, roles, and settings must come ONLY from provided sources. 
+- If uncertain, infer logically, but stay consistent with sources.
+
+⚠️ JSON RULES
+- Respond with ONE valid JSON object, nothing else (no prose, no code fences).
+- Use only double quotes. No contractions. Valid UTF-8. No trailing commas.
+- Use [] for non-applicable arrays (e.g., "soft_magic_rules": []).
+- Fill every required field with useful content. Do not emit placeholders like "TBD" or "N/A".
+- Project title must be "Hearts on Margin".
+
+"""
+
+#     PLANNING_INSTRUCTIONS = """
+# ## Production Brief (What to Deliver in JSON)
+
+# Using the BOOK CONTEXT, AVAILABLE ARTIFACTS, and the JSON OUTPUT SCHEMA, produce a fully populated plan with the following content standards.
+
+# ### 1) Project Metadata (`project`)
+# - Populate from Book Model. 
+# - `audience.type` and `audience.age` must reflect the Book Model.
+# - `length_words` must mirror the provided length (use the same textual range format).
+# - `pov` captures both the point-of-view **type** and **operational rules** (e.g., alternation cadence, distance).
+# - `tone` and `pace` mirror the Book Model (do not invent new terms).
+
+# ### 2) Logline and Themes
+# - **Logline:** One sentence (max ~45 words) summarizing protagonist(s), goal, central conflict, and stakes.
+# - **Themes:** 5–7 concise, marketable themes phrased as nouns or short gerundial phrases (e.g., “loyalty vs. truth”, “reinvention after loss”).
+
+# ### 3) World Bible (`world_bible`)
+# - **Core Locales:** 3–7 primary locations with narrative function and evocative visuals.
+# - **Soft Magic Rules:** For non-speculative genres, supply `[]`. For speculative, list rule statements that constrain capabilities and costs.
+# - **Safety Dial:** A simple content-intensity tag (e.g., “PG”, “PG-13”, “R”, or similar audience-appropriate label).
+
+# ### 4) Characters (`characters`)
+# - **protagonist:** One object representing the primary POV focus (for dual-protagonist stories, describe both within this object’s fields; keep names explicit in text).
+# - **mythic_figures:** If the genre has none, use an empty array `[]`.
+# - **meadow_cast:** Use for supporting cast if helpful; otherwise `null` is acceptable per schema.
+# - Ensure **observable_traits** are externally visible and actionable (no vague “nice”, prefer “drily funny under pressure”, “compulsively punctual”).
+
+# ### 5) Hero’s Journey Beats (`hero_journey_beats`)
+# - Provide the **full** set of stages listed in the schema, adapted to the genre. 
+# - `target_chapters` should be a compact range or list (e.g., “1–3”, “10–12”).
+
+# ### 6) Chapter Outline (`chapter_outline`)
+# Create 15–30 chapters unless the Blueprint dictates otherwise. For each:
+# - `ch`: integer starting at 1, sequential with no gaps.
+# - `title`: short, evocative, and unique.
+# - `act`: one of `"I"`, `"II"`, `"III"`.
+# - `setting`: specific locale drawn from `world_bible.core_locales` or consistent with it.
+# - `figure`: `null` unless a particular character is spotlighted (then use their name).
+# - `external_goal`: a concrete objective for the chapter’s POV figure(s).
+# - `obstacle`: a credible impediment (logistical, interpersonal, institutional, or internalized but externally manifested).
+# - `turn`: the beat that **changes** the situation (reversal, reveal, commitment, escalation).
+# - `cliffhanger`: a forward-pull line or situation (not a vague teaser).
+# - `words`: a range string (e.g., “1800–2600”). Keep chapter totals consistent with `pacing_targets`.
+
+# ### 7) Escalation Plan (`escalation_plan`)
+# - `stakes_progression`: 8–12 steps from personal risk to public or identity-level consequences.
+# - `setups_payoffs`: 8–15 clear pairs where the payoff truly references the earlier setup.
+
+# ### 8) Style Guide (`style_guide`)
+# - `voice`: 5–9 bullet rules (e.g., “banter-forward dialogue”, “close interiority on reversals”).
+# - `dialogue_rules`: 5–9 concrete rules (beats, subtext, tags).
+# - `objective_pov_guardrails`: 5–9 guardrails (e.g., “no head-hopping”, “scene breaks on POV swaps”, “no narrator judgments”).
+
+# ### 9) Pacing Targets (`pacing_targets`)
+# - Provide act chapter spans and word totals that align with length and outline.
+# - Typical split: Act I ≈ 20–25%, Act II ≈ 50–60%, Act III ≈ 20–25% (adjust if the Blueprint specifies otherwise).
+
+# ### 10) Research Checklist (`research_checklist`)
+# - 8–15 actionable items derived from **Research Data** and contextualized to the story (e.g., “Mount Sinai pre-op anesthesia workflow”, “desk compliance checks for block trades in volatile sessions”).
+
+# ### 11) Production Notes (`production_notes`)
+# - 6–12 practical notes for drafting and revision (formatting, continuity trackers, sensitivity reads, expert consults, fact-check passes).
+
+# ## Validation Pass (Before Emitting JSON)
+# Perform an internal check (do not print the checklist):
+# - All **required** schema fields present and correctly typed.
+# - `chapter_outline` count matches `pacing_targets` chapter ranges.
+# - Acts distribution is coherent with `pacing_targets`.
+# - Names, locations, and rules are used consistently across all sections.
+# - No contractions anywhere in string values.
+# - No markdown, no comments, no stray text—**JSON only**.
+# """
+
+    PLANNING_INSTRUCTIONS = """
+
+The chapter-by-chapter book plan should solely based on the contents of:
+BOOK MODEL
+BOOK SUMMARY
+BOOK DNA
+RESEARCH DATA
+
+"""
+
+    @classmethod
+    def generate_prompt(cls, inputs: ChapterPlanningInputs) -> str:
+        """
+        Generate complete chapter planning prompt from book artifacts.
+        
+        Args:
+            inputs: ChapterPlanningInputs containing all necessary data
+            
+        Returns:
+            Complete formatted prompt string
+        """
+        # Format the context sections
+#        book_context = cls._format_book_context(inputs)
+#        artifact_context = cls._format_artifact_context(inputs)
+        schema_context = cls._format_schema_context()
+
+    # book_model: BookModelType
+    # book_dna: str
+    # blueprint: Dict[str, Any]
+    # book_summary: str
+    # research_data: Dict[str, Any]
+
+        book_model = inputs.book_model.to_markdown()
+        book_dna = inputs.book_dna
+        blueprint = inputs.blueprint
+        book_summary = inputs.book_summary
+        formatted_research = "\n\n".join(
+            f"\t* {k}:\n" + "\n".join(f"\t\t - {x}" for x in (v or []))
+            for k, v in sorted(inputs.research_data.items())
+        )
+        # research_data = json.dumps(inputs.research_data, indent=2, ensure_ascii=False)
+
+# ## EXAMPLE OUTPUT STRUCTURE
+# Use this only as a structural reference. Do not copy or use its content.
+
+# {json.dumps(EXAMPLE_CHAPTER_PLAN, indent=2, ensure_ascii=False)}
+
+
+        # Construct complete prompt
+#         complete_prompt = f"""{cls.SYSTEM_PROMPT}
+
+# {cls.PLANNING_INSTRUCTIONS}
+
+# ## BOOK CONTEXT
+# # Data Priority Reminder:
+# # 1) Book Model (authoritative) → 2) Book Summary → 3) Book DNA → 5) Research Data
+# # Never contradict higher-priority sources. Infer when needed, but stay consistent.
+
+# BOOK MODEL:
+# {book_model}
+
+# BOOK SUMMARY:
+# {book_summary}
+
+# BOOK DNA:
+# {book_dna}
+
+# RESEARCH DATA:
+# {research_data}
+
+# JSON OUTPUT SCHEMA:
+# {schema_context}
+
+# ## HARD JSON GUARDRAILS
+# - You MUST respond with a JSON object that exactly matches JSON OUTPUT SCHEMA
+# - Output exactly one JSON object. No prose, no markdown, no code fences.
+# - Use only double quotes. No trailing commas. Valid UTF-8.
+# - Do not emit placeholders like "TBD" or "N/A".
+# - Respect enumerations (e.g., act ∈ {"I","II","III"}; HeroJourneyStage names must match).
+# - For non-applicable schema arrays (e.g., soft_magic_rules in non-speculative genres), use [].
+# - Do not use contractions anywhere in string values.
+
+
+# ## FINAL INSTRUCTIONS
+# 1. Analyze all provided artifacts thoroughly using the stated data priority.
+# 2. Create a chapter plan that integrates BOOK MODEL, BOOK SUMMARY, BOOK DNA, RESEARCH DATA, and any additional information and remains genre-appropriate.
+# 3. Ensure every required field in the JSON schema is populated with precise, useful content from BOOK MODEL, BOOK SUMMARY, BOOK DNA, RESEARCH DATA
+# 4. Return ONLY valid JSON — no explanations, no markdown, no code blocks.
+# 5. Make the plan detailed enough for a writer to execute successfully in drafting.
+
+# Generate the complete high-level chapter plan now as a valid JSON object:"""
+
+        complete_prompt = f"""{cls.SYSTEM_PROMPT}
+
+{cls.PLANNING_INSTRUCTIONS}
+
+## BOOK CONTEXT (authoritative data, DO NOT CONTRADICT)
+Data Priority Reminder:
+    1) BOOK MODEL (authoritative) → 2) BOOK SUMMARY → 3) BOOK DNA → 4) BOOK PLAN → 5) RESEARCH DATA
+Never contradict higher-priority sources. Infer when needed, but stay consistent.
+
+### BOOK MODEL:
+{book_model}
+
+### BOOK SUMMARY:
+{book_summary}
+
+### BOOK DNA:
+{book_dna}
+
+### BOOK PLAN:
+```json
+{json.dumps(blueprint, indent=2, ensure_ascii=False)}
+```
+
+### RESEARCH DATA:
+{formatted_research}
+
+### JSON OUTPUT SCHEMA:
+!IMPORTANT: You MUST follow the JSON OUTPUT SCHEMA provided below.
+
+{schema_context}
+
+### EXAMPLE OUTPUT:
+{EXAMPLE_CHAPTER_PLAN}
+
+## HARD JSON GUARDRAILS
+- You MUST respond with a JSON object that exactly matches JSON OUTPUT SCHEMA
+- Output exactly one JSON object. No prose, no markdown, no code fences.
+- Use only double quotes. No trailing commas. Valid UTF-8.
+- Do not emit placeholders like "TBD" or "N/A".
+- Respect enumerations.
+- For non-applicable schema arrays (e.g., soft_magic_rules in non-speculative genres), use [].
+- Do not use contractions anywhere in string values.
+
+
+## FINAL INSTRUCTIONS
+1. Analyze all provided artifacts thoroughly using the stated data priority.
+2. Create a chapter plan that integrates BOOK MODEL, BOOK SUMMARY, BOOK DNA, RESEARCH DATA, and any additional information and remains genre-appropriate.
+3. Ensure every required field in the JSON schema is populated with precise, useful content from BOOK MODEL, BOOK SUMMARY, BOOK DNA, RESEARCH DATA
+4. Return ONLY valid JSON — no explanations, no markdown, no code blocks.
+5. Make the plan detailed enough for a writer to execute successfully in drafting.
+
+Generate the complete high-level chapter plan as a valid JSON object now.
+"""
+
+        return complete_prompt
+    
+    @classmethod
+    def _format_book_context(cls, inputs: ChapterPlanningInputs) -> str:
+        """Format book model information for context."""
+        book = inputs.book_model
+
+        return f"""**Book**: "{book.book.title}" by {book.book.author}
+**Genre**: {book.genre.primary.type} / {book.genre.sub.type}
+**Audience**: {book.audience.type} (Ages {book.audience.age})
+**Length**: {book.book.length}
+**Structure**: {book.structure.type}
+**Conflict**: {book.conflict.type}
+**POV**: {book.pov.type}
+**Tone**: {book.tone.type}
+**Pace**: {book.pace.type}
+**World**: {book.world.type}
+**Style**: {book.writing_style}
+
+**Main Characters**: {book.characters.protagonist}
+
+{'\n'.join(
+    f"**Protagonist**: {v}"
+    for v in book.characters.protagonists
+    if isinstance(v, str) and v.strip()
+)}
+
+**Story Concept**: {book.book.idea}
+
+**Research Areas**: {', '.join([r.type for r in book.research])}"""
+
+    @classmethod
+    def _format_artifact_context(cls, inputs: ChapterPlanningInputs) -> str:
+        """Format all available artifacts for context."""
+        
+        # Format research summary
+        research_summary:str = ""
+        if inputs.research_data:
+            for k, v in inputs.research_data.items():
+                k = re.sub(r"\s+", " ", k.replace("_", " ")).strip().upper()
+                research_summary += f"- {k}: {'; '.join(v)}\n"
+        
+        # Format blueprint summary
+        blueprint_summary = "No blueprint available"
+        if inputs.blueprint:
+            phases = []
+            for key in inputs.blueprint['blueprint'].keys():
+                if key.startswith('phase_'):
+                    phases.append(f"- {key}: Available")
+            if phases:
+                blueprint_summary = f"7-phase blueprint available:\n" + "\n".join(phases)
+        
+        return f"""### Book DNA
+{inputs.book_dna}
+
+### Book Summary
+{inputs.book_summary[:500]}{"..." if len(inputs.book_summary) > 500 else ""}
+
+### Blueprint Status
+{blueprint_summary}
+
+### Research Data
+{research_summary}"""
+
+    @classmethod
+    def _format_schema_context(cls) -> str:
+        """Format the JSON schema for the prompt."""
+        return json.dumps(CHAPTER_PLANNING_SCHEMA, indent=2, ensure_ascii=False)
+
+    @classmethod
+    def create_from_files(cls, 
+                         book_model_path: str,
+                         book_dna_path: str,
+                         blueprint_path: str,
+                         summary_path: str,
+                         research_path: str,
+                         book_id: str) -> str:
+        """
+        Create chapter planning prompt from file paths.
+        
+        Args:
+            book_model_path: Path to book model JSON
+            book_dna_path: Path to book DNA text file
+            blueprint_path: Path to blueprint JSON
+            summary_path: Path to summary markdown
+            research_path: Path to research JSON
+            book_id: Unique book identifier
+            
+        Returns:
+            Complete chapter planning prompt
+        """
+        # Load book model
+        with open(book_model_path, 'r', encoding='utf-8') as f:
+            book_model_data = json.load(f)
+        book_model = BookModelType(**book_model_data)
+        
+        # Load book DNA
+        with open(book_dna_path, 'r', encoding='utf-8') as f:
+            book_dna = f.read().strip()
+        
+        # Load blueprint
+        with open(blueprint_path, 'r', encoding='utf-8') as f:
+            blueprint = json.load(f)
+        
+        # Load summary
+        with open(summary_path, 'r', encoding='utf-8') as f:
+            book_summary = f.read()
+        
+        # Load research data
+        with open(research_path, 'r', encoding='utf-8') as f:
+            research_data = json.load(f)
+        
+        # Create inputs
+        inputs = ChapterPlanningInputs(
+            book_model=book_model,
+            book_dna=book_dna,
+            blueprint=blueprint,
+            book_summary=book_summary,
+            research_data=research_data,
+            book_id=book_id
+        )
+        
+        return cls.generate_prompt(inputs)
+
+    @classmethod
+    def get_prompt_statistics(cls, inputs: ChapterPlanningInputs) -> Dict[str, Any]:
+        """
+        Get statistics about the generated prompt.
+        
+        Args:
+            inputs: ChapterPlanningInputs for analysis
+            
+        Returns:
+            Dictionary containing prompt statistics
+        """
+        prompt = cls.generate_prompt(inputs)
+        
+        words = prompt.split()
+        word_count = len(words)
+        estimated_tokens = int(word_count * 1.33)  # Rough estimation
+        
+        return {
+            'prompt_word_count': word_count,
+            'estimated_tokens': estimated_tokens,
+            'book_title': inputs.book_model.book.title,
+            'genre': f"{inputs.book_model.genre.primary.type}/{inputs.book_model.genre.sub.type}",
+            'target_length': inputs.book_model.book.length,
+            'research_areas': len(inputs.research_data.get('research_areas', [])) if inputs.research_data else 0,
+            'has_blueprint': bool(inputs.blueprint),
+            'has_book_dna': bool(inputs.book_dna),
+            'recommended_model_settings': {
+                "temperature": 0.1,          # minimize creativity, maximize fidelity
+                "top_p": 0.85,               # trims tail without over-pruning
+                "top_k": 50,                 # small but not too small candidate set
+                "repeat_penalty": 1.08,      # gentle; 1.2 can distort phrasing
+                "max_tokens": 7000           # right-size to your longest valid JSON
+            }        
+        }
+
+    @classmethod
+    def validate_output(cls, response_text: str) -> Dict[str, Any]:
+        """
+        Validate LLM response against the expected schema.
+        
+        Args:
+            response_text: Raw LLM response
+            
+        Returns:
+            Validation results dictionary
+        """
+        try:
+            # Try to parse JSON
+            response_json = extract_json_from_response(response_text)
+            
+            # Try to validate against Pydantic model
+            validated_plan = HighLevelChapterPlan(**response_json)
+            
+            return {
+                'is_valid': True,
+                'parsed_successfully': True,
+                'validation_passed': True,
+                'chapter_count': len(validated_plan.chapter_outline),
+                'hero_journey_beats': len(validated_plan.hero_journey_beats),
+                'research_items': len(validated_plan.research_checklist),
+                'themes_count': len(validated_plan.themes),
+                'error': None
+            }
+            
+        except json.JSONDecodeError as e:
+            return {
+                'is_valid': False,
+                'parsed_successfully': False,
+                'validation_passed': False,
+                'error': f"JSON parsing failed: {str(e)}"
+            }
+        except Exception as e:
+            return {
+                'is_valid': False,
+                'parsed_successfully': True,
+                'validation_passed': False,
+                'error': f"Schema validation failed: {str(e)}"
+            }
+
+
+def main():
+    """Example usage and testing."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Generate chapter planning prompts")
+    parser.add_argument('--book-model', required=True, help='Path to book model JSON')
+    parser.add_argument('--book-dna', required=True, help='Path to book DNA text')
+    parser.add_argument('--blueprint', required=True, help='Path to blueprint JSON')
+    parser.add_argument('--summary', required=True, help='Path to summary markdown')
+    parser.add_argument('--research', required=True, help='Path to research JSON')
+    parser.add_argument('--book-id', required=True, help='Book ID')
+    parser.add_argument('--output', help='Output file for prompt')
+    parser.add_argument('--stats', action='store_true', help='Show prompt statistics')
+    
+    args = parser.parse_args()
+    
+    try:
+        # Generate prompt from files
+        prompt = ChapterPlanningPromptGenerator.create_from_files(
+            args.book_model,
+            args.book_dna, 
+            args.blueprint,
+            args.summary,
+            args.research,
+            args.book_id
+        )
+        
+        if args.output:
+            with open(args.output, 'w', encoding='utf-8') as f:
+                f.write(prompt)
+            print(f"Prompt saved to {args.output}")
+        else:
+            print(prompt)
+        
+        if args.stats:
+            # For stats, we need to load the inputs again
+            with open(args.book_model, 'r', encoding='utf-8') as f:
+                book_model_data = json.load(f)
+            book_model = BookModelType(**book_model_data)
+            
+            with open(args.book_dna, 'r', encoding='utf-8') as f:
+                book_dna = f.read().strip()
+            
+            with open(args.blueprint, 'r', encoding='utf-8') as f:
+                blueprint = json.load(f)
+            
+            with open(args.summary, 'r', encoding='utf-8') as f:
+                book_summary = f.read()
+            
+            with open(args.research, 'r', encoding='utf-8') as f:
+                research_data = json.load(f)
+            
+            inputs = ChapterPlanningInputs(
+                book_model=book_model,
+                book_dna=book_dna,
+                blueprint=blueprint,
+                book_summary=book_summary,
+                research_data=research_data,
+                book_id=args.book_id
+            )
+            
+            stats = ChapterPlanningPromptGenerator.get_prompt_statistics(inputs)
+            print("\n" + "="*50)
+            print("CHAPTER PLANNING PROMPT STATISTICS")
+            print("="*50)
+            for key, value in stats.items():
+                if isinstance(value, dict):
+                    print(f"{key}:")
+                    for sub_key, sub_value in value.items():
+                        print(f"  {sub_key}: {sub_value}")
+                else:
+                    print(f"{key}: {value}")
+    
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+if __name__ == "__main__":
+    main()

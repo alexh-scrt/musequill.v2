@@ -28,7 +28,10 @@ class LLMService:
         self.max_tokens: Optional[int] = None
         self.top_p: float = 1.0
         self.top_k: Optional[int] = None
+        self.num_ctx: Optional[int] = None
+        self.num_predict: Optional[int] = None
         self.repeat_penalty: Optional[float] = None
+        self.seed: int = 42
         self.stop: Optional[str] = None
         self.llm: Optional[OllamaLLM] = None
 
@@ -53,10 +56,11 @@ class LLMService:
             f"temperature={self.temperature!r}, max_tokens={self.max_tokens!r}, "
             f"top_p={self.top_p!r}, top_k={self.top_k!r}, "
             f"repeat_penalty={self.repeat_penalty!r}, stop={self.stop!r}, "
+            f"num_ctx={self.num_ctx!r}, num_predict={self.num_predict!r}, "
             f"llm={'set' if self.llm else 'None'})"
         )
 
-    async def initialize(self):
+    async def initialize(self, *args, **kwargs):
         """Initialize LLM connection."""
         try:
             # Prepare initialization parameters
@@ -72,19 +76,28 @@ class LLMService:
                 init_params["repeat_penalty"] = self.repeat_penalty
             if self.stop is not None:
                 init_params["stop"] = self.stop
+            if self.num_ctx is not None:
+                init_params["num_ctx"] = self.num_ctx
+            if self.num_predict is not None:
+                init_params["num_predict"] = self.num_predict
+            if self.seed is not None:
+                init_params["seed"] = self.seed
+
             # Only add max_tokens if it's specified (some models don't support it)
             if self.max_tokens is not None:
-                init_params["num_predict"] = self.max_tokens  # Ollama uses 'num_predict' instead of 'max_tokens'
-            
+                init_params["num_predict"] = self.max_tokens  # Ollama uses 'num_predict'
+
+            # Merge in any extra keyword args (e.g., response_format)
+            init_params.update(kwargs)
+
             self.llm = OllamaLLM(**init_params)
-            logger.info(f"✅  LLM service initialized with model: {self.model_name}, "
-                       f"temperature: {self.temperature}, top_p: {self.top_p}, "
-                       f"max_tokens: {self.max_tokens}"
-                       f"top_k: {self.top_k}, repeat_penalty: {self.repeat_penalty}"
-                       f"stop: {self.stop}")
+            logger.info(
+                f"✅  LLM service initialized with params: {init_params}"
+            )
         except Exception as e:
             logger.error(f"🔴  Failed to initialize LLM: {e}")
             raise
+
 
     async def generate(
         self, 
@@ -155,10 +168,17 @@ class LLMService:
                 "response": response,
                 "timelapse": elapsed_time,
                 "parameters_used": {
+                    "base_url": self.base_url,
+                    "model": self.model_name,
                     "temperature": request_temperature,
                     "max_tokens": request_max_tokens,
                     "top_p": request_top_p,
-                    "model": self.model_name
+                    "top_k": self.top_k,
+                    "num_ctx": self.num_ctx,
+                    "num_predict": self.num_predict,
+                    "seed": self.seed,
+                    "repeat_penalty": self.repeat_penalty,
+                    "stop": self.stop
                 }
             }
             
@@ -175,12 +195,18 @@ class LLMService:
     
     async def update_default_parameters(
         self, 
+        *args,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         top_p: Optional[float] = None,
         top_k: Optional[int] = None,
+        num_ctx: Optional[int] = None,
+        num_predict: Optional[int] = None,
         repeat_penalty: Optional[float] = None,
-        stop: Optional[str] = None
+        seed: Optional[int] = None,
+        response_format: Optional[str] = None,
+        stop: Optional[str] = None,
+        **kwargs
     ):
         """
         Update the default parameters for future requests.
@@ -201,16 +227,27 @@ class LLMService:
             self.top_k = top_k
         if repeat_penalty is not None:
             self.repeat_penalty = repeat_penalty
+        if num_ctx is not None:
+            self.num_ctx = min(32768, num_ctx)
+        if num_predict is not None:
+            self.num_predict = min(4096, num_predict)
         if stop is not None:
             self.stop = stop
+        if seed is not None:
+            self.seed = seed
 
         logger.info("Calling initialize() again to apply these changes to the LLM instance")
 
-        await self.initialize()
+        # Build kwargs with response_format and any additional kwargs
+        extra_kwargs = dict(kwargs)
+        if response_format is not None:
+            extra_kwargs["response_format"] = response_format
 
+        await self.initialize(**extra_kwargs)
+        
         logger.info(f"Updated default parameters: temperature={self.temperature}, "
-                   f"max_tokens={self.max_tokens}, top_p={self.top_p}"
-                   f"top_k={self.top_k}, repeat_penalty={self.repeat_penalty}, stop={self.stop}")
+                   f"max_tokens={self.max_tokens}, top_p={self.top_p}, num_prodict={self.num_predict}, seed={self.seed},"
+                   f"top_k={self.top_k}, num_ctx={self.num_ctx} repeat_penalty={self.repeat_penalty}, stop={self.stop}")
     
     def get_current_parameters(self) -> Dict[str, Any]:
         """Get the current parameter configuration."""
@@ -220,6 +257,12 @@ class LLMService:
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
             "top_p": self.top_p,
+            "top_k": self.top_k,
+            "num_ctx": self.num_ctx,
+            "num_predict": self.num_predict,
+            "repeat_penalty": self.repeat_penalty,
+            "seed": self.seed,
+            "stop": self.stop,
             "is_initialized": self.llm is not None
         }
     

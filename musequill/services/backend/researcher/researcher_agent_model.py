@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 from dataclasses import dataclass
-from typing import List, Optional, Any, Dict, Union
+from typing import List, Optional, Any, Dict, Union, cast, Iterable
 import json
 
 
@@ -98,7 +98,24 @@ class ResearchQuery(BaseModel):
 
     def get_query(self) -> str:
         """Get the query string for Tavily."""
-        return f"**CONTEXT**:[Book, Article, Paper, Post writing research]. **CATEGORY**: [{self.category}]. **TOPIC**: [{self.topic}]. **WHAT TO RESEARCH**: [{self.description}]"
+        return f"""
+**CONTEXT**:[TOPIC RESEARCH].
+**SOURCES**: [{", ".join(self.sources_suggested)}].
+**CATEGORY**: [{self.category}].
+**TOPIC**: [{self.topic}].
+**WHAT TO RESEARCH**: [{self.description}]
+"""
+
+    def get_questions(self) -> Optional[List[str]]:
+        """Get the questions string for Tavily."""
+        
+        qq: List[str] = self.key_questions or []
+        return [
+f"""
+**TOPIC**: [{self.topic}].
+**QUESTION**: [{q}]
+"""
+        for q in qq]
 
     @classmethod
     def from_json(cls, json_data: str) -> 'ResearchQuery':

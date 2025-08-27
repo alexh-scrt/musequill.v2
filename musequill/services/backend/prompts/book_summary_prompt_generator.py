@@ -129,11 +129,13 @@ Based on the book template data provided, craft a mesmerizing book summary that 
         # Construct the complete prompt
         complete_prompt = f"""{cls.SYSTEM_PROMPT}
 
+## How It Begins:
+
+{book_info['bootstrap']}        
+
 ## Book Context Summary
 
 {context_summary}
-
-{mythology_context}
 
 ## Summary Generation Task
 
@@ -147,9 +149,7 @@ Based on the book template data provided, craft a mesmerizing book summary that 
 - **World Type**: {world_info.get('type', 'fantasy')} - {world_info.get('description', 'magical and immersive')}
 
 ### Special Focus Areas:
-{"- **Mythological Integration**: Weave Slavic mythology elements naturally into the summary" if config.include_mythology_elements else ""}
-{"- **Thematic Depth**: Highlight themes of courage, kindness, wit, and self-discovery" if config.include_themes else ""}
-{"- **Audience Connection**: Ensure language and concepts resonate with the target age group" if config.target_audience_focus else ""}
+{"\n".join([f'\t* {i["type"]} - {i["description"]}' for i in book_data['research']])}
 
 ## Complete Book Template Data
 
@@ -186,6 +186,7 @@ Generate your creative book summary now:"""
         
         return f"""**Title**: "{book.get('title', 'Unknown')}" by {book.get('author', 'Unknown')}
 **Core Concept**: {book.get('idea', 'A magical adventure story')}
+**How It Begins**: {book.get('bootstrap', 'A typical beginning for the genre')}
 **Genre**: {genre.get('primary', {}).get('type', 'fantasy')} / {genre.get('sub', {}).get('type', 'children')}
 **Target Audience**: {audience.get('type', 'children')} (Ages: {audience.get('age', '7-12')})
 **Length**: {book.get('length', '40,000-60,000 words')} - {book.get('type', 'novelle')}
@@ -257,7 +258,7 @@ Generate your creative book summary now:"""
         print(f"Book summary prompt saved to: {file_path}")
     
     @classmethod
-    def get_prompt_statistics(cls, book_data: Dict[str, Any], config: Optional[BookSummaryConfig] = None) -> Dict[str, Any]:
+    def get_prompt_statistics(cls, prompt:str, book_data: Dict[str, Any], config: Optional[BookSummaryConfig] = None) -> Dict[str, Any]:
         """
         Get statistics about the generated prompt.
         
@@ -268,7 +269,6 @@ Generate your creative book summary now:"""
         Returns:
             Dictionary with prompt statistics and recommendations
         """
-        prompt = cls.generate_prompt(book_data, config)
         
         # Calculate complexity based on book elements
         complexity_score = cls._calculate_complexity_score(book_data)
@@ -280,9 +280,9 @@ Generate your creative book summary now:"""
             "book_complexity_score": complexity_score,
             "recommended_model_settings": {
                 "temperature": 1.3,  # Higher for creativity
-                "top_k": 40,
+                "top_k": 45,
                 "top_p": 0.9,
-                "repeat_penalty": 1.1,
+                "repeat_penalty": 1.2,
                 "max_tokens": 1000,  # Enough for detailed summary
                 "stop": ["</summary>"],
             },

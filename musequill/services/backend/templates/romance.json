@@ -1,0 +1,152 @@
+{
+    "book": {
+        "title": "Hearts on Margin",
+        "author": "Alex Hart",
+        "idea": "Write a contemporary, witty, and emotionally nuanced romance set in New York City about two married forty-somethings—Noah Bennett, a successful Goldman Sachs trader with a lethal sense of timing and humor, and Dr. Ava Kline, a sharp, compassionate anesthesiologist at Mount Sinai—who stumble into a connection that is equal parts banter and inevitability. As their chemistry deepens, they grapple with the moral, familial, and professional fallout of choosing each other: children, spouses, reputations, and the cost of self-honesty. The novel balances sparkling dialogue, high-stakes careers, and intimate interiority as they confront the central question: do they stay and preserve their families or risk everything to build a life together?",
+        "type": "novelle",
+        "length": "40,000-60,000 words",
+        "language": "english",
+        "bootstrap": "Noah Bennett treats a red light like after-hours liquidity—thin, but playable. His client pings “in lobby,” a horn answers, and a yellow blur edits the plan; pain arrives late but loud. Asphalt, siren, the Mount Sinai awning swallowing daylight. In fluorescent calm, a woman in a blue cap—KLINE, ANESTHESIOLOGY—meets his bravado with steadier math. “On a scale of one to terrible?” she asks, checking airway, allergies, watch, ring. “I am late to a meeting,” he says. “That’s at least an eight.” She nods, already building a softer landing. “Deep breaths. We make pain smaller for a living.” He grins because grinning is cheaper than screaming. “Marry me.” “Not while you’re NPO,” Ava says, and the monitor keeps time as the day quietly recalibrates."
+    },
+    "genre": {
+        "primary": {
+            "type": "romance",
+            "description": "A love story centered on the emotional journey and ultimate choice between two protagonists."
+        },
+        "sub": {
+            "type": "contemporary romance",
+            "description": "Modern, real-world setting focusing on mature themes, careers, and complex family dynamics."
+        }
+    },
+    "audience": {
+        "type": "adults",
+        "age": "35-60"
+    },
+    "writing_style": "adult contemporary, witty, emotionally nuanced",
+    "structure": {
+        "type": "Two-Hander (Dual Arc)",
+        "description": "Interleaved arcs for both leads, escalating external pressure and internal conflict toward a single irreversible choice."
+    },
+    "characters": {
+        "protagonist": "Noah Bennett & Dr. Ava Kline",
+        "protagonists": 
+        [
+            "Noah Bennett - successful Goldman Sachs trader, witty, funny, great sense of humor, competent, and emotionally guarded professional whose live is upended by an unignorable connection with Dr. Ava Kline.",
+            "Dr. Ava Kline - Mount Sinai anesthesiologist, witty, competent, and emotionally guarded professionals whose live is upended by an unignorable connection with Noah Bennett."
+        ],
+        "narrator": "An unobtrusive third-person voice that alternates close focus between Noah and Ava, highlighting banter, subtext, and moral tension."
+    },
+    "conflict": {
+        "type": "person vs self & society",
+        "description": "They must reconcile personal desire with vows, children, reputations, and social expectations, choosing between preservation and reinvention."
+    },
+    "pov": {
+        "type": "third person limited (alternating)",
+        "description": "Chapters switch between Noah’s and Ava’s close perspectives, revealing interiority while maintaining narrative momentum."
+    },
+    "personality": {
+        "type": "witty and resilient",
+        "description": "Quick with humor and candor under pressure; able to navigate high-stakes careers and messy emotions without losing empathy."
+    },
+    "plot": {
+        "type": "forbidden love / moral crossroads",
+        "description": "A slow-burn connection intensifies amid escalating professional and familial stakes until a decisive moment forces a choice that redefines both lives."
+    },
+    "pace": {
+        "type": "slow burn with brisk banter",
+        "description": "Measured emotional escalation punctuated by sharp, fast dialogue and high-stakes scenes."
+    },
+    "research": [
+        {
+            "type": "medical (anesthesiology & hospital operations)",
+            "description": "Clinical workflow, OR protocols, on-call realities, ethical considerations in patient care at a major NYC hospital.",
+            "context": true
+        },
+        {
+            "type": "finance (trading culture & risk management)",
+            "description": "Desk dynamics, compliance, risk, market microstructure, and the social texture of Wall Street.",
+            "context": true
+        },
+        {
+            "type": "family law & ethics (New York)",
+            "description": "Divorce law basics, custody considerations, prenups, and the ethical frameworks around infidelity and disclosure.",
+            "context": true
+        },
+        {
+            "type": "NYC landscape & landmarks (scene scaffolding)",
+            "description": "Central Park (The Ramble, Bethesda Terrace), the High Line, Brooklyn Bridge/DUMBO, Grand Central, Bryant Park, Lincoln Center, the Met/Guggenheim, West Side Highway piers, East River esplanade—views, distances, ambient noise, crowd patterns, and seasonal light/weather for authentic beats.",
+            "context": true
+        },
+        {
+            "type": "neighborhood micro-textures",
+            "description": "UES vs UWS vs Tribeca vs West Village vs Park Slope—street widths, building stock, dog-walker traffic at dawn, school drop-off chaos, late-night bodega rhythm; how each area ‘casts’ a scene.",
+            "context": true
+        },
+        {
+            "type": "transit & movement realism",
+            "description": "Subway vs car service vs walking time reality, crosstown bottlenecks, hospital access routes, Midtown gridlock cues, rainy-day taxi scarcity; how logistics force choices and conflict.",
+            "context": true
+        },
+        {
+            "type": "iconic institutions & venues",
+            "description": "Lincoln Center, Carnegie Hall, MoMA, Whitney, The Frick, The Met steps, NYPL Main Branch; gala spaces and after-event bars where reputations mix with martinis.",
+            "context": true
+        },
+        {
+            "type": "high society — private clubs & membership etiquette",
+            "description": "Application sponsors, dress codes, guest limits, no-photo rules, seating politics, back-entrance norms; how membership signals status and access.",
+            "context": true
+        },
+        {
+            "type": "philanthropy & gala circuit",
+            "description": "Benefit calendars, chair/host pecking order, donor tiers, seating charts, step-and-repeat optics, auction culture; where alliances form and gossip travels.",
+            "context": true
+        },
+        {
+            "type": "restaurants & reservation economy",
+            "description": "Power lunch vs chef’s counter vs private rooms, host relationships, off-menu favors, back-table discretion, sommelier theater; how a table becomes a plot lever.",
+            "context": true
+        },
+        {
+            "type": "private schools & admissions culture",
+            "description": "Interviews, ‘fit’ language, board expectations, giving norms, parent-association politics, school event optics; how kids’ schools become adult battlegrounds.",
+            "context": true
+        },
+        {
+            "type": "Hamptons & seasonal migration",
+            "description": "Memorial Day→Labor Day rhythms, Jitney/LIRR rituals, beach clubs, share houses, benefit season; city scandals that resurface by the ocean.",
+            "context": true
+        },
+        {
+            "type": "media, gossip & reputation management",
+            "description": "Columnists, society magazines, Instagram circles, controlled leaks, off-the-record coffees, crisis PR triage; how rumors harden into ‘truth.’",
+            "context": true
+        },
+        {
+            "type": "style codes & status signals",
+            "description": "Quiet-luxury heuristics, watch culture, black-tie vs ‘creative black-tie,’ hospital-to-dinner wardrobe pivots, weather-proof elegance; what characters wear as subtext.",
+            "context": true
+        },
+        {
+            "type": "etiquette of introductions, favors & thank-yous",
+            "description": "Who introduces whom, RSVP hierarchies, place-card diplomacy, hostess gifts, condolence protocols; soft power expressed as manners.",
+            "context": true
+        }
+    ],
+    "technology": {
+        "type": "modern digital age",
+        "description": "Smartphones, encrypted messaging, EHR systems, trading platforms, and the surveillance of digital footprints shaping choices and risks."
+    },
+    "tone": {
+        "type": "witty",
+        "description": "Light-on-its-feet dialogue and humor that counterbalances weighty decisions and emotional stakes."
+    },
+    "world": {
+        "type": "realistic contemporary (New York City)",
+        "description": "Upper East Side brownstones, Mount Sinai’s ORs, Midtown power lunches, Wall Street trading floors, late-night cabs over the Queensboro, and quiet corners of Central Park."
+    },
+    "style": {
+        "type": "conversational",
+        "description": "Banter-driven prose with crisp scene work, intimate close-ups, and clean, cinematic beats."
+    }
+}

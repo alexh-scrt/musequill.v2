@@ -30,6 +30,16 @@ from .book_dna_prompt_generator import (
     BookDNAPromptGenerator
 )  
 
+from .chaptet_planning_prompt_generator import (
+    ChapterPlanningPromptGenerator,
+    ChapterPlanningInputs
+)
+
+from .book_plan_prompt_generator import (
+    BookPlanPromptGenerator,
+    BookPlanConfig
+)
+
 __all__ = [
     "BlueprintPromptGenerator",
     "PlanningPromptGenerator",
@@ -41,5 +51,9 @@ __all__ = [
     "TARGET_JSON_SCHEMA",
     "EXPECTED_OUTPUT",
     "BookDNAInputs",
-    "BookDNAPromptGenerator"
+    "BookDNAPromptGenerator",
+    "ChapterPlanningPromptGenerator",
+    "ChapterPlanningInputs",
+    "BookPlanPromptGenerator",
+    "BookPlanConfig"
 ]

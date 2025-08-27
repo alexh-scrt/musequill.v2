@@ -11,6 +11,8 @@ from typing import Dict, Any, List
 from dataclasses import dataclass
 from .research_topics_schema import RESEARCH_TOPICS_JSON_SCHEMA, RESEARCH_TOPICS_EXPECTED_OUTPUT
 
+from musequill.services.backend.model import BookModelType
+
 class ResearchPromptGenerator:
     """Generates optimized prompts for research topic identification with JSON output."""
     
@@ -82,7 +84,7 @@ Consider the book's genre, setting, characters, themes, and target audience when
 """
 
     @classmethod
-    def generate_prompt(cls, book_summary: str, book_plan: str) -> str:
+    def generate_prompt(cls, book_model: BookModelType, book_summary: str, book_plan: Dict[str, any]) -> str:
         """
         Generate a complete prompt for research topic identification.
         
@@ -99,7 +101,12 @@ Consider the book's genre, setting, characters, themes, and target audience when
         # Convert to clean JSON for inclusion
         #summary_json = cls._summary_to_dict(book_summary)
         #plan_json = cls._plan_to_dict(book_plan)
-        
+
+        if hasattr(book_model, 'research'):
+            research_json = "\n".join(f'\t * {r.type} - {r.description}'  for r in book_model.research)
+        else:
+            research_json = "\n".join(f'\t * {r['type']} - {r['description']}'  for r in book_model['research'])
+
         # Construct the complete prompt
         complete_prompt = f"""{cls.SYSTEM_PROMPT}
 
@@ -136,14 +143,17 @@ You MUST respond with a JSON object that follows this exact structure:
 {RESEARCH_TOPICS_EXPECTED_OUTPUT}
 ```
 
-## Book Summary
+## Book Context
 
 {book_summary}
 
 ## Book Plan Data
 
-{book_plan}
+{json.dumps(book_plan, indent=2, ensure_ascii=False)}
 
+
+## Relevant Research Topics
+{research_json}
 
 ## Research Topic Generation Task
 

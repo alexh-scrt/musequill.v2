@@ -93,10 +93,134 @@ Remember: Populate ALL fields in the JSON schema with meaningful, specific conte
         template_json = json.dumps(book_model.model_dump(), indent=2, ensure_ascii=False)
         
         # Construct the complete prompt
+#         complete_prompt = f"""{cls.SYSTEM_PROMPT}
+# # BOOK
+# ## TITLE: {book_model.book.title}
+# ## AUTHOR: {book_model.book.author}
+# ## IDEA: {book_model.book.idea}
+# ## HOW IT BEGINS: {book_model.book.bootstrap}
+# ## LENGTH: {book_model.book.length}
+# ## LANGUAGE: {book_model.book.language}
+# ## MAIN CHARACTERS: {book_model.characters.protagonist}
+# {"\n".join([f'\t{i}' for i in book_model.characters.protagonists])}
+# ## CONFLICT: {book_model.conflict.description}
+# ## GENRE: {book_model.genre.primary.model_dump()} - {book_model.genre.sub.model_dump()}
+# ## PLOT: {book_model.plot.model_dump()}
+# ## POV: {book_model.pov.model_dump()}
+# ## PERSONALITY: {book_model.personality.model_dump()}
+# ## STYLE: {book_model.style.model_dump()}
+# ## TONE: {book_model.tone.model_dump()}
+# ## STRUCTURE: {book_model.structure.type} - {book_model.structure.description}
+
+# ## BOOK TEMPLATE SUMMARY
+
+# {template_summary}
+
+# ## BLUEPRINT GENERATION TASK
+
+# {cls.BLUEPRINT_INSTRUCTIONS}
+
+# ## Book Template Data
+
+# {template_json}
+
+
+# # ABSOLUTE RULES:
+# - ❗ Only use data provided to you; Do not invent anything
+# - ❗ Do not anything outside the scope of the data provided to you
+# - ❗ Output MUST be valid JSON that conforms to the JSON output schema
+# - ❗ Do NOT include any explanation, comment, or markdown
+# - ❗ Populate **every field** in the schema with SPECIFIC, USEFUL data
+
+# # CRITICAL STRUCTURE REQUIREMENTS:
+# - 🚨 MUST include "title" field at ROOT level (not inside blueprint)
+# - 🚨 MUST include "author" field at ROOT level (not inside blueprint) 
+# - 🚨 MUST include "blueprint" object containing all phases
+# - 🚨 Use exact field names: "phase_1", "phase_2", etc. (NOT "phase1")
+
+# # Output Format Requirements:
+# - 🔹 Pure JSON object starting with {{"title": "...", "author": "...", "blueprint": {{...}}}}
+# - 🔹 All fields filled with meaningful content
+# - 🔹 NO markdown/code blocks
+# - 🔹 NO extra commentary
+
+# # DO NOT DO:
+# - ❌ Do not preface with "Here's your JSON:"
+# - ❌ Do not wrap output in triple backticks
+# - ❌ Do not include schema again
+# - ❌ Do not repeat the template data
+# - ❌ Do not put "title" or "author" inside the "blueprint" object
+
+# 🛑 Your ONLY job is to produce a JSON object compliant with the JSON output schema.
+# 🚫 Do NOT interpret. Do NOT reformat. Do NOT include text, commentary, or labels.
+# ✅ Your JSON MUST match the structure and field names EXACTLY.
+
+# 🔍 MOST COMMON VALIDATION ERRORS TO AVOID:
+# 1. Missing "title" field at root level - THIS IS REQUIRED
+# 2. Missing "author" field at root level - THIS IS REQUIRED  
+# 3. Using "phase1" instead of "phase_1" 
+# 4. Missing the "blueprint" root object
+# 5. Putting title/author inside blueprint instead of at root level
+
+# You MUST respond with a JSON object that follows this exact json output schema:
+
+# ## TARGET JSON SCHEMA
+
+# {TARGET_JSON_SCHEMA}
+
+# ## EXAMPLE OUTPUT THAT MATCHES TARGET JSON SCHEMA
+# IMPORTANT: DO NOT USE THE CONTENTS FROM THE EXAMPLE WHEN YOU GENERATE JSON OUTPUT
+
+# {EXPECTED_OUTPUT}
+
+
+# ## FINAL INSTRUCTIONS FOR JSON GENERATION:
+
+# 1. Extract the book title from book.title in the template data above for the ROOT "title" field
+# 2. Extract the author name from book.author in the template data above for the ROOT "author" field  
+# 3. Create the "blueprint" object with all 7 phases (phase_1 through phase_7)
+# 4. Fill every field in every phase with specific, actionable content based on the template data
+# 5. Ensure your output starts with: {{"title": "ACTUAL_BOOK_TITLE", "author": "ACTUAL_AUTHOR_NAME", "blueprint": {{...}}}}
+
+# Generate the complete book writing blueprint now as a valid JSON object matching the TARGET JSON SCHEMA exactly. Return ONLY the JSON object with no additional text or formatting.
+
+# """
+
         complete_prompt = f"""{cls.SYSTEM_PROMPT}
+# BOOK
+## ACTUAL_BOOK_TITLE: {book_model.book.title}
+## ACTUAL_BOOK_AUTHOR: {book_model.book.author}
+## IDEA: {book_model.book.idea}
+## HOW IT BEGINS: {book_model.book.bootstrap}
+## LENGTH: {book_model.book.length}
+## LANGUAGE: {book_model.book.language}
+## MAIN CHARACTERS: {book_model.characters.protagonist}
+{"\n".join([f'\t{i}' for i in book_model.characters.protagonists])}
+## CONFLICT: {book_model.conflict.description}
+## GENRE: {book_model.genre.primary.model_dump()} - {book_model.genre.sub.model_dump()}
+## PLOT: {book_model.plot.model_dump()}
+## POV: {book_model.pov.model_dump()}
+## PERSONALITY: {book_model.personality.model_dump()}
+## STYLE: {book_model.style.model_dump()}
+## TONE: {book_model.tone.model_dump()}
+## STRUCTURE: {book_model.structure.type} - {book_model.structure.description}
+
+## BOOK TEMPLATE SUMMARY
+
+{template_summary}
+
+## BLUEPRINT GENERATION TASK
+
+{cls.BLUEPRINT_INSTRUCTIONS}
+
+## Book Template Data
+
+{template_json}
 
 
 # ABSOLUTE RULES:
+- ❗ Only use data provided to you; Do not invent anything
+- ❗ Do not anything outside the scope of the data provided to you
 - ❗ Output MUST be valid JSON that conforms to the JSON output schema
 - ❗ Do NOT include any explanation, comment, or markdown
 - ❗ Populate **every field** in the schema with SPECIFIC, USEFUL data
@@ -137,21 +261,6 @@ You MUST respond with a JSON object that follows this exact json output schema:
 
 {TARGET_JSON_SCHEMA}
 
-## EXAMPLE OUTPUT THAT MATCHES TARGET JSON SCHEMA
-
-{EXPECTED_OUTPUT}
-
-## BOOK TEMPLATE SUMMARY
-
-{template_summary}
-
-## BLUEPRINT GENERATION TASK
-
-{cls.BLUEPRINT_INSTRUCTIONS}
-
-## Book Template Data
-
-{template_json}
 
 ## FINAL INSTRUCTIONS FOR JSON GENERATION:
 
@@ -164,7 +273,6 @@ You MUST respond with a JSON object that follows this exact json output schema:
 Generate the complete book writing blueprint now as a valid JSON object matching the TARGET JSON SCHEMA exactly. Return ONLY the JSON object with no additional text or formatting.
 
 """
-
         return complete_prompt
     
     @classmethod
@@ -230,9 +338,9 @@ Generate the complete book writing blueprint now as a valid JSON object matching
             "estimated_tokens": len(prompt.split()) * 1.3,  # Rough estimate
             "template_complexity_score": cls._calculate_complexity_score(book_model),
             "recommended_model_settings": {
-                "temperature": 0.3,  # Lower temperature for JSON consistency
+                "temperature": 0.1,  # Lower temperature for JSON consistency
                 "max_tokens": 4000,  # Higher for JSON output
-                "top_p": 0.9
+                "top_p": 0.5
             }
         }
     

@@ -34,7 +34,7 @@ def extract_json_from_response(input_str: str) -> Optional[Dict[str, Any]]:
     
     if not input_str:
         return None
-    
+
     # Try multiple extraction strategies
     strategies = [
         _extract_from_code_blocks,
@@ -58,7 +58,7 @@ def _extract_from_code_blocks(text: str) -> Optional[Dict[str, Any]]:
     """Extract JSON from markdown code blocks."""
     # Look for ```json or ``` code blocks
     patterns = [
-        r'```json\s*\n(.*?)\n```',
+        r'```json\s*(\{[\s\S]*?\})\s*```',
         r'```\s*\n(.*?)\n```',
         r'`(.*?)`'
     ]

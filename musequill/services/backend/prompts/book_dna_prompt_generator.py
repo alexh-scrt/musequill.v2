@@ -14,6 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 
+from musequill.services.backend.model import (
+    BookModelType
+)
+
 @dataclass
 class BookDNAInputs:
     """
@@ -59,7 +63,7 @@ class BookDNAPromptGenerator:
     """
     
     SYSTEM_PROMPT = """You are a master book consultant specializing in creating compressed "Book DNA" - 
-a 200-300 token essential representation that captures the unique genetic code of a book project.
+a 500-700 token essential representation that captures the unique genetic code of a book project.
 
 **CRITICAL OBJECTIVES:**
 1. Extract the absolute ESSENCE of this book project
@@ -99,19 +103,18 @@ Return ONLY the Book DNA text without explanations or commentary (e.g. 'Here is 
         context_data = cls._extract_context_data(inputs)
         
         prompt = f"""{cls.SYSTEM_PROMPT}
+# BOOK DNA - book essential information
 
-## BOOK DNA - book essential information
-
-**Book Model Summary:**
+## Book Model Summary
 {cls._format_book_model_summary(context_data['book_model'])}
 
-**Blueprint Essence:**
-{cls._format_blueprint_essence(context_data['blueprint']['blueprint'])}
+## Blueprint Essence
+{cls._format_blueprint_essence(context_data['blueprint'])}
 
-**Story Positioning:**
+## Story Positioning
 {cls._format_story_positioning(context_data)}
 
-**Research & Constraints:**
+## Research & Constraints
 {cls._format_research_constraints(context_data)}
 
 ## DNA GENERATION TASK
@@ -149,17 +152,17 @@ Generate the Book DNA now:"""
     def _format_book_model_summary(cls, book_model: Dict[str, Any]) -> str:
         """Format book model data for prompt context."""
         
-        book = book_model.book
-        genre = book_model.genre
-        audience = book_model.audience
+        book = book_model['book']
+        genre = book_model['genre']
+        audience = book_model['audience']
         
-        return f"""Title: "{book.title}"
-Author: {book.author}
-Genre: {genre.primary.type}: {genre.primary.description}
-Sub-genre: {genre.sub.type}: {genre.sub.description}
-Audience: {audience.type} (Ages: {audience.age})
-Length: {book.length}
-Core Idea: {book.idea}"""
+        return f"""Title: "{book['title']}"
+Author: {book['author']}
+Genre: {genre['primary']['type']}: {genre['primary']['description']}
+Sub-genre: {genre['sub']['type']}: {genre['sub']['description']}
+Audience: {audience['type']} (Ages: {audience['age']})
+Length: {book['length']}
+Core Idea: {book['idea']}"""
     
     @classmethod
     def _get_from_blueprint(cls, blueprint: Dict[str, Any], phase: str, default: str = 'Not specified') -> str:
@@ -190,29 +193,53 @@ Core Idea: {book.idea}"""
     def _format_story_positioning(cls, context_data: Dict[str, Any]) -> str:
         """Format story positioning information."""
         
-        book_model = context_data['book_model']
+        book_model:BookModelType = BookModelType(**context_data['book_model'])
         summary = context_data['summary']  # First 300 chars
         
-        return f"""Story World: {book_model.world}. {book_model.world.description}
-Writing Style: {book_model.writing_style}
-POV: {book_model.pov}. {book_model.pov.description}
-Tone: {book_model.tone.type}. {book_model.tone.description}
-Pace: {book_model.pace.type}, {book_model.pace.description}
+        return f"""
+**Story World:**
+{book_model.world.type}. {book_model.world.description}
 
-Story Essence: {summary}"""
+**Writing Style:**
+{book_model.writing_style}
+
+**POV:** 
+{book_model.pov.type}. {book_model.pov.description}
+
+**Tone:** 
+{book_model.tone.type}. {book_model.tone.description}
+
+**Pace:** 
+{book_model.pace.type}, {book_model.pace.description}
+
+**Story Essence:** 
+{summary}"""
     
     @classmethod
     def _format_research_constraints(cls, context_data: Dict[str, Any]) -> str:
         """Format research and constraint information."""
         
-        research = context_data['research']
-        book_model = context_data['book_model']
-        research_topics = [v[0] for v in research]
-        research_context = [v[1] for v in research if v[1]]
-        return f"""Primary Research: {', '.join(research_topics)}
-Technology Level: {book_model.technology.type}. {book_model.technology.description}
-Research Context: {', '.join(research_context)}
-Length Constraint: {book_model.book.length}"""
+        research:Dict[str, List[str]] = context_data['research']
+        book_model:BookModelType = BookModelType(**context_data['book_model'])
+
+        formatted_research = "\n\n".join(
+    f"\t* {k}:\n" + "\n".join(f"\t\t - {x}" for x in (v or []))
+    for k, v in sorted(research.items())
+)
+
+        return f"""
+        
+**TECHNOLOGY LEVEL:** 
+
+{book_model.technology.type}. {book_model.technology.description}
+
+**RESEARCH CONTEXT:**
+
+{formatted_research}
+
+**LENGTH CONSTRAINT:**
+
+{book_model.book.length}"""
     
     @classmethod
     def _identify_unique_elements(cls, context_data: Dict[str, Any]) -> str:
@@ -321,7 +348,7 @@ Length Constraint: {book_model.book.length}"""
             'in_range': 200 <= estimated_tokens <= 700,
             'has_book_id': 'BOOK DNA' in dna_text and 'ID:' in dna_text,
             'has_essential_elements': any(keyword in dna_text.lower() for keyword in 
-                                        ['title', 'author', 'genre', 'audience', 'protagonist']),
+                                        ['title', 'author', 'genre', 'audience', 'protagonist', 'protagonists']),
             'density_score': cls._calculate_information_density(dna_text)
         }
         

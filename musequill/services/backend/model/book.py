@@ -18,6 +18,7 @@ class BookInfo(BaseModel):
     type: str
     length: str
     language: str
+    bootstrap: Optional[str]
 
 
 class GenreType(BaseModel):
@@ -47,6 +48,7 @@ class Structure(BaseModel):
 class Characters(BaseModel):
     """Character role definitions."""
     protagonist: str
+    protagonists: List[str]
     narrator: str
 
 
@@ -193,6 +195,171 @@ class BookModelType(BaseModel):
             "technology_era": self.technology.type,
             "protagonist_personality": self.personality.type
         }
+    
+    def to_markdown(self) -> str:
+        """Render a nicely structured Markdown view of the book. Skips null/empty values."""
+
+        def _has(val) -> bool:
+            if val is None:
+                return False
+            if isinstance(val, str):
+                return val.strip() != ""
+            if isinstance(val, (list, tuple, set)):
+                return any(_has(x) for x in val)
+            if isinstance(val, dict):
+                return any(_has(v) for v in val.values())
+            return True
+
+        def _kv(label: str, value: str, indent: int = 0) -> str:
+            """Key–value bullet line if value present."""
+            if not _has(value):
+                return ""
+            return f'{" " * indent}- **{label}:** {value}'
+
+        def _section(title: str) -> str:
+            return f"\n## {title}\n"
+
+        lines = []
+
+        # Title & Author
+        if _has(self.book.title):
+            lines.append(f"# {self.book.title}")
+        if _has(self.book.author):
+            lines.append(f"**Author:** {self.book.author}")
+
+        # Book basics
+        lines.append(_section("Book"))
+        if _has(self.book.idea):
+            lines.append(_kv("Idea", self.book.idea))
+        if _has(self.book.type):
+            lines.append(_kv("Type", self.book.type))
+        if _has(self.book.length):
+            lines.append(_kv("Length", self.book.length))
+        if _has(self.book.language):
+            lines.append(_kv("Language", self.book.language))
+        if _has(self.writing_style):
+            lines.append(_kv("Writing Style", self.writing_style))
+
+        # Optional bootstrap as blockquote
+        if _has(self.book.bootstrap):
+            lines.append("\n### Bootstrap\n")
+            lines.append("> " + self.book.bootstrap.replace("\n", "\n> "))
+
+        # Genre
+        lines.append(_section("Genre"))
+        if _has(self.genre.primary.type) or _has(self.genre.primary.description):
+            primary = self.genre.primary.type
+            if _has(self.genre.primary.description):
+                primary = f"{primary} — {self.genre.primary.description}" if _has(primary) else self.genre.primary.description
+            lines.append(_kv("Primary", primary))
+        if _has(self.genre.sub.type) or _has(self.genre.sub.description):
+            sub = self.genre.sub.type
+            if _has(self.genre.sub.description):
+                sub = f"{sub} — {self.genre.sub.description}" if _has(sub) else self.genre.sub.description
+            lines.append(_kv("Sub-genre", sub))
+
+        # Audience
+        lines.append(_section("Audience"))
+        if _has(self.audience.type):
+            lines.append(_kv("Type", self.audience.type))
+        if _has(self.audience.age):
+            lines.append(_kv("Age", self.audience.age))
+
+        # Structure
+        lines.append(_section("Structure"))
+        if _has(self.structure.type):
+            lines.append(_kv("Type", self.structure.type))
+        if _has(self.structure.description):
+            lines.append(_kv("Description", self.structure.description))
+
+        # Characters
+        lines.append(_section("Characters"))
+        if _has(self.characters.protagonist):
+            lines.append(_kv("Protagonist", self.characters.protagonist))
+        if _has(self.characters.protagonists):
+            lines.append("- **Protagonists:**")
+            for p in self.characters.protagonists:
+                if _has(p):
+                    lines.append(f"  - {p}")
+        if _has(self.characters.narrator):
+            lines.append(_kv("Narrator", self.characters.narrator))
+
+        # Conflict
+        lines.append(_section("Conflict"))
+        if _has(self.conflict.type):
+            lines.append(_kv("Type", self.conflict.type))
+        if _has(self.conflict.description):
+            lines.append(_kv("Description", self.conflict.description))
+
+        # POV
+        lines.append(_section("Point of View"))
+        if _has(self.pov.type):
+            lines.append(_kv("Type", self.pov.type))
+        if _has(self.pov.description):
+            lines.append(_kv("Description", self.pov.description))
+
+        # Personality
+        lines.append(_section("Protagonist Personality"))
+        if _has(self.personality.type):
+            lines.append(_kv("Type", self.personality.type))
+        if _has(self.personality.description):
+            lines.append(_kv("Description", self.personality.description))
+
+        # Plot
+        lines.append(_section("Plot"))
+        if _has(self.plot.type):
+            lines.append(_kv("Type", self.plot.type))
+        if _has(self.plot.description):
+            lines.append(_kv("Description", self.plot.description))
+
+        # Pace
+        lines.append(_section("Pace"))
+        if _has(self.pace.type):
+            lines.append(_kv("Type", self.pace.type))
+        if _has(self.pace.description):
+            lines.append(_kv("Description", self.pace.description))
+
+        # Research
+        if _has(self.research):
+            lines.append(_section("Research"))
+            for r in self.research:
+                # Render each research item compactly
+                line = []
+                if _has(r.type):
+                    line.append(f"**{r.type}**")
+                if _has(r.description):
+                    line.append(f"— {r.description}")
+                # context is a required bool; include explicitly
+                line.append(f"(context: {'yes' if getattr(r, 'context', False) else 'no'})")
+                lines.append(f"- " + " ".join(line))
+
+        # Technology, Tone, World, Style
+        lines.append(_section("Setting & Aesthetics"))
+        if _has(self.technology.type) or _has(self.technology.description):
+            tech = self.technology.type
+            if _has(self.technology.description):
+                tech = f"{tech} — {self.technology.description}" if _has(tech) else self.technology.description
+            lines.append(_kv("Technology", tech))
+        if _has(self.tone.type) or _has(self.tone.description):
+            tone = self.tone.type
+            if _has(self.tone.description):
+                tone = f"{tone} — {self.tone.description}" if _has(tone) else self.tone.description
+            lines.append(_kv("Tone", tone))
+        if _has(self.world.type) or _has(self.world.description):
+            world = self.world.type
+            if _has(self.world.description):
+                world = f"{world} — {self.world.description}" if _has(world) else self.world.description
+            lines.append(_kv("World", world))
+        if _has(self.style.type) or _has(self.style.description):
+            style = self.style.type
+            if _has(self.style.description):
+                style = f"{style} — {self.style.description}" if _has(style) else self.style.description
+            lines.append(_kv("Style", style))
+
+        # Remove blank lines and join
+        final = "\n".join([ln for ln in lines if _has(ln)])
+        return final.strip() + "\n"
+
 
 
 # Utility functions for working with BookModelType

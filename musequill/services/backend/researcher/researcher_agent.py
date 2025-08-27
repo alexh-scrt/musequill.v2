@@ -20,7 +20,7 @@ import hashlib
 import re
 import time
 from datetime import datetime, timezone
-from typing import Dict, List, Any, Optional, Tuple, Set
+from typing import Dict, List, Any, Optional, Tuple, Set, cast, Iterable
 from urllib.parse import urlparse
 from uuid import uuid4
 from dataclasses import dataclass
@@ -249,8 +249,8 @@ class ResearcherAgent:
             updated_queries = self._update_query_statuses(queries, research_results)
             
             # Calculate totals
-            total_chunks = sum(result.total_chunks_stored for result in research_results.values())
-            total_sources = sum(result.total_sources for result in research_results.values())
+            total_chunks = sum(result.total_chunks_stored for result_list in research_results.values() for result in result_list)
+            total_sources = sum(result.total_sources for result_list in research_results.values() for result in result_list)
             
             # Update statistics
             self.stats['total_chunks_stored'] += total_chunks
@@ -317,7 +317,7 @@ class ResearcherAgent:
         
         return sorted_queries
 
-    async def _execute_queries_concurrently(self, queries: List[ResearchQuery], research_id: str) -> Dict[str, ResearchResults]:
+    async def _execute_queries_concurrently(self, queries: List[ResearchQuery], research_id: str) -> Dict[str, List[ResearchResults]]:
         """
         Execute research queries with controlled concurrency.
         
@@ -328,7 +328,7 @@ class ResearcherAgent:
         Returns:
             Dictionary mapping query text to ResearchResults
         """
-        results = {}
+        results: Dict[str, List[ResearchResults]] = {}
         
         # Process queries in batches to respect concurrency limits
         batch_size = self.config.max_concurrent_queries
@@ -384,7 +384,7 @@ class ResearcherAgent:
         
         return results
     
-    async def _execute_query_batch(self, queries: List[ResearchQuery], research_id: str) -> Dict[str, ResearchResults]:
+    async def _execute_query_batch(self, queries: List[ResearchQuery], research_id: str) -> Dict[str, List[ResearchResults]]:
         """Execute a batch of queries concurrently."""
         tasks = []
         
@@ -395,32 +395,25 @@ class ResearcherAgent:
             tasks.append(task)
         
         # Wait for all tasks to complete
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        task_results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # Process results
-        batch_results = {}
-        for query, result in zip(queries, results):
-            if isinstance(result, Exception):
-                logger.error(f"Query '{query.category}' failed: {result}")
-                batch_results[query.category] = ResearchResults(
-                    query=query.category,
-                    search_results=[],
-                    processed_chunks=[],
-                    total_chunks_stored=0,
-                    total_sources=0,
-                    quality_stats={},
-                    execution_time=0.0,
-                    status='failed',
-                    error_message=str(result)
-                )
-                self.stats['queries_failed'] += 1
-            else:
-                batch_results[query.category] = result
-                self.stats['queries_processed'] += 1
-        
+        batch_results:Dict[str, List[ResearchResults]] = {}
+        try:
+            for results in task_results:
+                if isinstance(results, Exception):
+                    logger.error(f"Query failed: {results}")
+                    self.stats['queries_failed'] += 1
+                else:
+                    if isinstance(results, list):
+                        for result in cast(Iterable[ResearchResults], results):
+                            batch_results.setdefault(result.query, []).append(result)
+                            self.stats['queries_processed'] += 1
+        except Exception as e:
+            logger.error(f'Failed to batch process: {str(e)}')
         return batch_results
     
-    async def _research_single_query(self, query: ResearchQuery, research_id: str) -> ResearchResults:
+    async def _research_single_query(self, query: ResearchQuery, research_id: str) -> List[ResearchResults]:
         """
         Research a single query with retries.
         
@@ -431,62 +424,68 @@ class ResearcherAgent:
         Returns:
             ResearchResults for the query
         """
+        results:List[ResearchResults] = []
         start_time = time.time()
         last_error = None
-        research_query:str = query.get_query()
-        
-        for attempt in range(self.config.query_retry_attempts):
-            try:
-                logger.info(f"Executing query [{research_query}] (attempt {attempt + 1})")
-                
-                # Perform web search
-                search_results = await self._perform_web_search(research_query)
-                
-                # Filter and validate results
-                filtered_results = self._filter_search_results(search_results)
-                
-                # Process content and create chunks
-                processed_chunks = await self._process_search_results(filtered_results, query, research_id)
-                
-                # Store chunks in vector database
-                chunks_stored = await self._store_chunks_in_chroma(processed_chunks, research_id)
-                
-                # Calculate quality statistics
-                quality_stats = self._calculate_quality_stats(processed_chunks)
-                
-                execution_time = time.time() - start_time
-                
-                result = ResearchResults(
-                    query=query.category,
-                    search_results=filtered_results,
-                    processed_chunks=[],
-                    total_chunks_stored=chunks_stored,
-                    total_sources=len(filtered_results),
-                    quality_stats=quality_stats,
-                    execution_time=execution_time,
-                    status='completed'
-                )
-                
-                logger.info(
-                    f"Query [{query.get_query()}]' completed: {chunks_stored} chunks stored, "
-                    f"{len(filtered_results)} sources processed in {execution_time:.2f}s"
-                )
-                
-                return result
-                
-            except Exception as e:
-                last_error = e
-                logger.warning(f"Query [{query.get_query()}] attempt {attempt + 1} failed: {e}")
-                
-                if attempt < self.config.query_retry_attempts - 1:
-                    await asyncio.sleep(self.config.retry_delay_seconds)
-        
+        main_query:str = query.get_query()
+        research_queries:List[str] = query.get_questions()
+        research_queries.append(main_query)
+        for _query in research_queries:
+            for attempt in range(self.config.query_retry_attempts):
+                try:
+                    logger.info(f"Executing query [{_query}] (attempt {attempt + 1})")
+                    
+                    # Perform web search
+                    search_results = await self._perform_web_search(_query)
+                    
+                    # Filter and validate results
+                    filtered_results = self._filter_search_results(search_results)
+                    
+                    # Process content and create chunks
+                    processed_chunks = await self._process_search_results(filtered_results, _query, research_id)
+                    
+                    # Store chunks in vector database
+                    chunks_stored = await self._store_chunks_in_chroma(processed_chunks, research_id)
+                    
+                    # Calculate quality statistics
+                    quality_stats = self._calculate_quality_stats(processed_chunks)
+                    
+                    execution_time = time.time() - start_time
+                    
+                    result = ResearchResults(
+                        query=query.category,
+                        search_results=filtered_results,
+                        processed_chunks=[],
+                        total_chunks_stored=chunks_stored,
+                        total_sources=len(filtered_results),
+                        quality_stats=quality_stats,
+                        execution_time=execution_time,
+                        status='completed'
+                    )
+                    
+                    logger.info(
+                        f"Query [{query.get_query()}]' completed: {chunks_stored} chunks stored, "
+                        f"{len(filtered_results)} sources processed in {execution_time:.2f}s"
+                    )
+                    
+                    results.append(result)
+                    
+                except Exception as e:
+                    last_error = e
+                    logger.warning(f"Query [{query.get_query()}] attempt {attempt + 1} failed: {e}")
+                    
+                    if attempt < self.config.query_retry_attempts - 1:
+                        await asyncio.sleep(self.config.retry_delay_seconds)
+
+        if len(results) > 0:
+            return results
+
         # All attempts failed
         execution_time = time.time() - start_time
-        logger.error(f"Query [{research_query}]' failed after {self.config.query_retry_attempts} attempts")
+        logger.error(f"Query [{main_query}]' failed after {self.config.query_retry_attempts} attempts")
         
-        return ResearchResults(
-            query=research_query,
+        return [ResearchResults(
+            query='; '.join(research_queries),
             search_results=[],
             processed_chunks=[],
             total_chunks_stored=0,
@@ -495,7 +494,7 @@ class ResearcherAgent:
             execution_time=execution_time,
             status='failed',
             error_message=str(last_error)
-        )
+        )]
     
     async def _perform_web_search(self, query: str) -> List[SearchResult]:
         """
@@ -911,7 +910,7 @@ class ResearcherAgent:
     def _update_query_statuses(
         self,
         original_queries: List[ResearchQuery],
-        results: Dict[str, ResearchResults]
+        results: Dict[str, List[ResearchResults]]
     ) -> List[ResearchQuery]:
         """Update query statuses based on research results."""
         updated_queries = []
@@ -920,17 +919,33 @@ class ResearcherAgent:
             updated_query = query.copy()
             
             if query.get_query() in results:
-                result = results[query.get_query()]
-                updated_query['status'] = result.status
-                updated_query['results_count'] = result.total_chunks_stored
-                
-                # Add additional metadata
-                updated_query['execution_time'] = result.execution_time
-                updated_query['sources_processed'] = result.total_sources
-                updated_query['quality_stats'] = result.quality_stats
-                
-                if result.error_message:
-                    updated_query['error_message'] = result.error_message
+                result_list = results[query.get_query()]
+                if result_list:
+                    # Use the first result for status and aggregate data from all results
+                    first_result = result_list[0]
+                    updated_query['status'] = first_result.status
+                    
+                    # Aggregate data from all results
+                    total_chunks = sum(r.total_chunks_stored for r in result_list)
+                    total_sources = sum(r.total_sources for r in result_list)
+                    total_execution_time = sum(r.execution_time for r in result_list)
+                    
+                    updated_query['results_count'] = total_chunks
+                    updated_query['execution_time'] = total_execution_time
+                    updated_query['sources_processed'] = total_sources
+                    
+                    # Combine quality stats from all results
+                    combined_quality_stats = {}
+                    if result_list[0].quality_stats:
+                        combined_quality_stats = result_list[0].quality_stats.copy()
+                        # If there are multiple results, you may want to aggregate quality stats
+                        # For now, just use the first result's quality stats
+                    updated_query['quality_stats'] = combined_quality_stats
+                    
+                    # Check for any error messages
+                    error_messages = [r.error_message for r in result_list if r.error_message]
+                    if error_messages:
+                        updated_query['error_message'] = '; '.join(error_messages)
             
             updated_queries.append(updated_query)
         

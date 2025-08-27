@@ -10,6 +10,7 @@ import re
 class CharacterRole(str, Enum):
     """Character role types in narrative structure."""
     PROTAGONIST = "protagonist"
+    PROTAGONISTS = "protagonists"
     ANTAGONIST = "antagonist"
     DEUTERAGONIST = "deuteragonist"  # Second main character
     LOVE_INTEREST = "love_interest"
@@ -29,6 +30,7 @@ class CharacterRole(str, Enum):
         """Human-readable display name."""
         names = {
             self.PROTAGONIST: "Protagonist",
+            self.PROTAGONISTS: "Protagonists",
             self.ANTAGONIST: "Antagonist",
             self.DEUTERAGONIST: "Deuteragonist",
             self.LOVE_INTEREST: "Love Interest",
@@ -50,6 +52,7 @@ class CharacterRole(str, Enum):
         """Detailed description of the character role."""
         descriptions = {
             self.PROTAGONIST: "The main character who drives the story forward, faces the central conflict, and undergoes the most significant character development throughout the narrative.",
+            self.PROTAGONISTS: "The main characters who drive the story forward, face the central conflict, and undergo the most significant character development throughout the narrative.",
             self.ANTAGONIST: "The primary opponent or obstacle that creates conflict for the protagonist, whether a person, force, or circumstance that opposes the main character's goals.",
             self.DEUTERAGONIST: "The second most important character in the story, often serving as a close companion, rival, or secondary protagonist with their own significant arc.",
             self.LOVE_INTEREST: "A character who serves as the romantic focus for the protagonist or other main characters, driving romantic subplots and emotional development.",
@@ -71,7 +74,8 @@ class CharacterRole(str, Enum):
         """Level of importance in the narrative structure."""
         importance_map = {
             self.PROTAGONIST: "primary",
-            self.ANTAGONIST: "primary", 
+            self.PROTAGONISTS: "primary",
+            self.ANTAGONIST: "primary",
             self.DEUTERAGONIST: "major",
             self.LOVE_INTEREST: "major",
             self.MENTOR: "major",
@@ -92,6 +96,7 @@ class CharacterRole(str, Enum):
         """Common narrative functions this role serves."""
         function_map = {
             self.PROTAGONIST: ["drives plot", "character growth", "reader identification", "goal pursuit"],
+            self.PROTAGONISTS: ["drive plot", "character growth", "reader identification", "goal pursuit"],
             self.ANTAGONIST: ["creates conflict", "opposes protagonist", "tests limits", "represents obstacles"],
             self.DEUTERAGONIST: ["supports protagonist", "parallel development", "alternate perspective", "major subplot"],
             self.LOVE_INTEREST: ["romantic tension", "emotional stakes", "character motivation", "relationship development"],
@@ -123,9 +128,25 @@ class CharacterRole(str, Enum):
         mappings = {
             # Primary roles
             "main character": cls.PROTAGONIST,
+            "main characters": cls.PROTAGONISTS,
             "hero": cls.PROTAGONIST,
+            "heroes": cls.PROTAGONISTS,
             "heroine": cls.PROTAGONIST,
             "primary character": cls.PROTAGONIST,
+            "primary characters": cls.PROTAGONISTS,
+            "protagonist": cls.PROTAGONIST,
+            "protagonists": cls.PROTAGONISTS,
+            "lead character": cls.PROTAGONIST,
+            "lead characters": cls.PROTAGONISTS,
+            "lead": cls.PROTAGONIST,
+            "leads": cls.PROTAGONISTS,
+            "lead protagonist": cls.PROTAGONIST,
+            "lead protagonists": cls.PROTAGONISTS,
+            "lead hero": cls.PROTAGONIST,
+            "lead heroine": cls.PROTAGONIST,
+
+            # Opposite roles
+            "antagonist": cls.ANTAGONIST,
             "villain": cls.ANTAGONIST,
             "bad guy": cls.ANTAGONIST,
             "enemy": cls.ANTAGONIST,
@@ -181,13 +202,13 @@ class CharacterRole(str, Enum):
     @classmethod
     def get_primary_roles(cls) -> List['CharacterRole']:
         """Get primary character roles."""
-        return [cls.PROTAGONIST, cls.ANTAGONIST]
+        return [cls.PROTAGONIST, cls.PROTAGONISTS, cls.ANTAGONIST]
 
     @classmethod
     def get_major_roles(cls) -> List['CharacterRole']:
         """Get major character roles."""
         return [
-            cls.PROTAGONIST, cls.ANTAGONIST, cls.DEUTERAGONIST, 
+            cls.PROTAGONIST, cls.PROTAGONISTS, cls.ANTAGONIST, cls.DEUTERAGONIST, 
             cls.LOVE_INTEREST, cls.MENTOR, cls.SHAPESHIFTER
         ]
 
