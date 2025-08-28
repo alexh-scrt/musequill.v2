@@ -369,7 +369,7 @@ def build_context_pack(
             "pov": constraints.get("pov"),
             "tone": constraints.get("tone"),
             "pace": constraints.get("pace"),
-            "safety": chapter_brief["constraints"].get("safety"),
+            "safety": getattr(chapter_brief.constraints, 'safety', None),
         },
         "chapter_brief": chapter_brief,
         "rolling": {
@@ -386,8 +386,8 @@ def select_research_for_prompt(research: Dict[str, Any], brief: GenericChapterBr
     Down-select research to the most relevant items for this chapter.
     Shape: {"figures":[...], "locales":[...], "topics":[...]}
     """
-    setting = (brief["scenes"][0]["location"] if brief.get("scenes") else brief["meta"]["chapter_title"]).lower()
-    figure = (brief["scenes"][0]["characters_on_stage"][0] if brief.get("scenes") else brief["meta"]["chapter_title"]).lower()
+    setting = (brief.scenes[0].location if brief.scenes else brief.meta.chapter_title).lower()
+    figure = (brief.scenes[0].characters_on_stage[0] if brief.scenes and brief.scenes[0].characters_on_stage else brief.meta.chapter_title).lower()
 
     def pick(items, keyname):
         out = []
@@ -447,8 +447,8 @@ def make_prompt(ctx: Dict[str, Any]) -> str:
     - Tail of prior chapter (to match voice/ongoing beats):\n{ctx['rolling']['prior_chapter_text_tail'] or 'N/A'}
 
     ## Chapter Brief (LOCKED)
-    - Act: {brief['meta']['act']} | Chapter {brief['meta']['chapter_number']}: {brief['meta']['chapter_title']}
-    - Target words (±10%): {brief['meta']['target_words']}
+    - Act: {brief.meta.act} | Chapter {brief.meta.chapter_number}: {brief.meta.chapter_title}
+    - Target words (±10%): {brief.meta.target_words}
     - Beats: 
       - {beats}
     - Setups to plant: {", ".join(brief.get("setups", [])) or "—"}
@@ -470,7 +470,7 @@ def make_prompt(ctx: Dict[str, Any]) -> str:
 
     ## Output
     - Write **one complete chapter** in Markdown.
-    - Start with: `# Chapter {brief['meta']['chapter_number']}: {brief['meta']['chapter_title']}`
+    - Start with: `# Chapter {brief.meta.chapter_number}: {brief.meta.chapter_title}`
     - No author notes, no outlines, no bullet lists—**prose only** after the header.
     - Stay strictly within canon and research. If a fact is unknown, stay neutral; do not invent lore beyond the provided materials.
 
@@ -488,7 +488,7 @@ def make_repair_prompt(ctx: Dict[str, Any], prior_text: str, issues: List[str]) 
     {fixes}
 
     ### Chapter Header (keep identical)
-    # Chapter {brief['meta']['chapter_number']}: {brief['meta']['chapter_title']}
+    # Chapter {brief.meta.chapter_number}: {brief.meta.chapter_title}
 
     ### Your Previous Draft (for reference only)
     {prior_text[:12000]}
@@ -501,7 +501,7 @@ def make_repair_prompt(ctx: Dict[str, Any], prior_text: str, issues: List[str]) 
 
 def validate(text: str, brief: GenericChapterBrief, constraints: Dict[str, Any]) -> List[str]:
     issues: List[str] = []
-    target = brief["meta"]["target_words"]
+    target = brief.meta.target_words
     wc = count_words(text)
     low, high = int(target*0.9), int(target*1.1)
 #    if wc < low: issues.append(f"Increase length to at least {low} words (now {wc}).")
@@ -555,7 +555,7 @@ def summarize_chapter(text: str, brief: GenericChapterBrief, llm: LLMFn) -> str:
     Summarize the following chapter in 6–10 bullet points focused on **observable** events, locations, and on-page outcomes.
     Avoid character interiority or speculation. Use concise present-tense lines.
 
-    Chapter title: {brief['meta']['chapter_title']}
+    Chapter title: {brief.meta.chapter_title}
 
     Text:
     {text[:16000]}
@@ -573,7 +573,7 @@ def extract_continuity(text: str, brief: GenericChapterBrief, llm: LLMFn) -> Dic
 
     Rules: list only items **explicitly present on the page**. No speculation.
 
-    Chapter: {brief['meta']['chapter_number']} – {brief['meta']['chapter_title']}
+    Chapter: {brief.meta.chapter_number} – {brief.meta.chapter_title}
     Text:
     {text[:16000]}
 

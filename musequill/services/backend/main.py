@@ -984,5 +984,184 @@ async def writer():
     except Exception as e:
         logger.error(f"Error: {e}")
 
+# enhanced_main.py - Replace your existing writer() function
+
+import asyncio
+import json
+from pathlib import Path
+from uuid import uuid4
+from typing import List, Dict, Any
+
+# Import your existing modules
+from musequill.services.backend.writers.chapter_planning_model import GenericPlan
+from musequill.services.backend.writers.book_planning_model import GenericBookPlan
+from musequill.services.backend.writers.chapter_brief_model import GenericChapterBrief
+from musequill.services.backend.utils import coerce_to_model
+from musequill.services.backend.writers.research_model import RefinedResearch
+from musequill.services.backend.model import BookModelType
+from musequill.services.backend.llm.ollama_client import LLMService, create_llm_service
+from musequill.services.backend.utils.loader import load_chapter_briefs
+
+# Import the enhanced chapter writer
+from musequill.services.backend.writers.enhanced_chapter_writer import enhanced_write_all_chapters_with_qc
+
+import logging
+logger = logging.getLogger(__name__)
+
+
+async def enhanced_writer():
+    """Enhanced writer function with improved context management for coherent chapters."""
+    
+    try:
+        print("🚀 Starting Enhanced Book Writer with Context Memory")
+        
+        # Initialize LLM service
+        llm_service: LLMService = create_llm_service()
+        output_path = Path('musequill/services/backend/samples')
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Generate unique book ID for this run
+        book_id = str(uuid4())
+        print(f"📚 Book ID: {book_id}")
+        
+        print("📂 Loading planning artifacts...")
+        
+        # Load all the planning artifacts
+        with open(output_path.joinpath('chapter-plan.json')) as f:
+            chapter_plan: GenericPlan = GenericPlan(**json.load(f))
+            
+        with open(output_path.joinpath('book_model.json')) as f:
+            book_model: BookModelType = BookModelType(**json.load(f))
+            
+        with open(output_path.joinpath('book_plan.json')) as f:
+            book_plan: GenericBookPlan = GenericBookPlan(**json.load(f))
+            
+        with open(output_path.joinpath('book_summary.md')) as f:
+            book_summary = f.read()
+            
+        with open(output_path.joinpath('book-dna.md')) as f:
+            book_dna = f.read()
+            
+        with open(output_path.joinpath('refined-research-results.json')) as f:
+            research_dict = json.load(f)
+        
+        # Load chapter briefs
+        briefs_dict = load_chapter_briefs(output_path)
+        briefs: List[GenericChapterBrief] = [
+            coerce_to_model(payload, GenericChapterBrief) 
+            for _, payload in briefs_dict.items()
+        ]
+        
+        # Convert research to proper format
+        research = RefinedResearch.from_json_dict(research_dict)
+        
+        print(f"📋 Loaded {len(briefs)} chapter briefs")
+        print(f"🔬 Loaded research corpus with {len(research_dict.get('figures', []))} figures, "
+              f"{len(research_dict.get('locales', []))} locations, {len(research_dict.get('topics', []))} topics")
+        
+        # Enhanced context information
+        print("🧠 Initializing Enhanced Context System...")
+        print("   ✓ Narrative state tracking")
+        print("   ✓ Character development continuity") 
+        print("   ✓ Plot thread management")
+        print("   ✓ Cross-chapter relationship tracking")
+        
+        # Prepare output directory
+        manuscript_dir = "manuscript"
+        Path(manuscript_dir).mkdir(parents=True, exist_ok=True)
+        
+        print("✍️ Beginning enhanced chapter generation...")
+        print("=" * 60)
+        
+        # Write all chapters with enhanced context management
+        results = await enhanced_write_all_chapters_with_qc(
+            book_model=book_model,
+            book_plan=book_plan,
+            chapter_briefs=briefs,
+            book_summary=book_summary,
+            research_corpus=research,  # This will be converted internally
+            llm=llm_service,
+            out_dir=manuscript_dir,
+            book_id=book_id
+        )
+        
+        print("=" * 60)
+        print("📊 Generation Summary:")
+        print(f"✅ Successfully generated {len(results)} chapters")
+        
+        # Calculate statistics
+        total_words = sum(r["metadata"]["word_count"] for r in results)
+        avg_quality = sum(r["quality_score"] for r in results) / len(results)
+        
+        print(f"📝 Total words: {total_words:,}")
+        print(f"📈 Average quality score: {avg_quality:.2f}/1.0")
+        print(f"🎯 Average words per chapter: {total_words // len(results):,}")
+        
+        # Quality breakdown
+        high_quality = sum(1 for r in results if r["quality_score"] >= 0.8)
+        medium_quality = sum(1 for r in results if 0.6 <= r["quality_score"] < 0.8)
+        low_quality = sum(1 for r in results if r["quality_score"] < 0.6)
+        
+        print(f"🏆 Quality distribution:")
+        print(f"   High (≥0.8): {high_quality} chapters")
+        print(f"   Medium (0.6-0.8): {medium_quality} chapters") 
+        print(f"   Low (<0.6): {low_quality} chapters")
+        
+        # Save generation report
+        report = {
+            "book_id": book_id,
+            "generation_timestamp": str(Path().absolute()),
+            "total_chapters": len(results),
+            "total_words": total_words,
+            "average_quality_score": avg_quality,
+            "quality_distribution": {
+                "high": high_quality,
+                "medium": medium_quality, 
+                "low": low_quality
+            },
+            "chapters": [
+                {
+                    "number": r["metadata"]["chapter_number"],
+                    "title": r["metadata"]["chapter_title"],
+                    "word_count": r["metadata"]["word_count"],
+                    "quality_score": r["quality_score"],
+                    "attempts": r["metadata"]["attempts"]
+                }
+                for r in results
+            ]
+        }
+        
+        report_path = Path(manuscript_dir) / f"generation_report_{book_id}.json"
+        with open(report_path, 'w', encoding='utf-8') as f:
+            json.dump(report, f, indent=2, ensure_ascii=False)
+        
+        print(f"📋 Generation report saved to: {report_path}")
+        
+        # Context coherence analysis
+        print("\n🔗 Context Coherence Analysis:")
+        context_manager_state = Path(manuscript_dir) / f"narrative_state_{book_id}.json"
+        if context_manager_state.exists():
+            with open(context_manager_state, 'r') as f:
+                narrative_data = json.load(f)
+                
+            print(f"   Character states tracked: {len(narrative_data.get('character_states', {}))}")
+            print(f"   Plot threads tracked: {len(narrative_data.get('plot_threads', []))}")
+            print(f"   Chapter summaries stored: {len(narrative_data.get('chapter_summaries', []))}")
+        
+        print("🎉 Enhanced book generation completed successfully!")
+        print(f"📁 Manuscript saved in: {Path(manuscript_dir).absolute()}")
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"Enhanced writer failed: {e}")
+        print(f"❌ Error during enhanced generation: {e}")
+        raise
+
+
 if __name__ == "__main__":
-    asyncio.run(writer())
+    # Run the enhanced writer
+    asyncio.run(enhanced_writer())
+    
+    # Uncomment to run single chapter test instead:
+    # asyncio.run(test_enhanced_writer_single_chapter())

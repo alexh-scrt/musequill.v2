@@ -27,6 +27,11 @@ from .chapter_critic import (
     ChapterCritic
 )
 
+from .context_manager import (
+    EnhancedContextManager,
+    create_enhanced_context_manager
+)
+
 __all__ = [
     "generate_chapter_plan",
     "ValidationPolicy",
@@ -37,5 +42,7 @@ __all__ = [
     "GenericBookPlan",
     "GenericChapterBrief",
     "RefinedResearch",
-    "ChapterCritic"
+    "ChapterCritic",
+    "EnhancedContextManager",
+    "create_enhanced_context_manager"
 ]
